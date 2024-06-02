@@ -23,8 +23,8 @@ async fn main(sp: Spawner) {
 
     defmt::info!("main");
 
-    sp.spawn_task(blink(core.SYST, interrupt));
-    sp.spawn_task(task2());
+    blink(sp).spawn(core.SYST, interrupt);
+    task2(sp).spawn();
 }
 
 #[zeptos::task]

@@ -16,7 +16,7 @@ pub fn cortex_m() -> TokenStream {
         fn main() -> ! {
             unsafe { zeptos::internal::pre_init(); }
             let spawner = unsafe { ::zeptos::Spawner::steal() };
-            spawner.spawn_task(__main_task(spawner));
+            __main_task(spawner).spawn(spawner);
             unsafe { zeptos::internal::post_init(); }
         }
     }

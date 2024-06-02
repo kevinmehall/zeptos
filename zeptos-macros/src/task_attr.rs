@@ -67,6 +67,9 @@ pub fn run(args: &[NestedMeta], f: syn::ItemFn) -> Result<TokenStream, TokenStre
     let task_ident = f.sig.ident.clone();
     let task_inner_ident = format_ident!("__{}_task", task_ident);
 
+    let task_handle_ty = format_ident!("__{}_handle", task_ident);
+    let trait_ident = format_ident!("__{}_trait", task_ident);
+
     let mut task_inner = f;
     let visibility = task_inner.vis.clone();
     task_inner.vis = syn::Visibility::Inherited;
@@ -84,21 +87,9 @@ pub fn run(args: &[NestedMeta], f: syn::ItemFn) -> Result<TokenStream, TokenStre
     }
 
     let mut task_outer: ItemFn = parse_quote! {
-        #visibility fn #task_ident(#fargs) -> ::zeptos::SpawnToken<impl ::core::future::Future> {
-            trait _ZeptosInternalTaskTrait {
-                type Fut: ::core::future::Future + 'static;
-                fn construct(#fargs) -> Self::Fut;
-            }
-
-            impl _ZeptosInternalTaskTrait for () {
-                type Fut = impl ::core::future::Future + 'static;
-                fn construct(#fargs) -> Self::Fut {
-                    #task_inner_ident(#(#full_args,)*)
-                }
-            }
-
-            static TASK: ::zeptos::Task<<() as _ZeptosInternalTaskTrait>::Fut> = ::zeptos::Task::new();
-            unsafe { TASK._spawn_token(<() as _ZeptosInternalTaskTrait>::construct(#(#full_args,)*)) }
+        #visibility fn #task_ident(s: ::zeptos::Spawner) -> #task_handle_ty {
+            static TASK: ::zeptos::Task<<() as #trait_ident>::Fut> = ::zeptos::Task::new();
+            #task_handle_ty { task: &TASK }
         }
     };
 
@@ -112,6 +103,44 @@ pub fn run(args: &[NestedMeta], f: syn::ItemFn) -> Result<TokenStream, TokenStre
         // in the user's code.
         #[doc(hidden)]
         #task_inner
+
+        trait #trait_ident {
+            type Fut: ::core::future::Future + 'static;
+            fn construct(#fargs) -> Self::Fut;
+        }
+
+        impl #trait_ident for () {
+            type Fut = impl ::core::future::Future + 'static;
+            fn construct(#fargs) -> Self::Fut {
+                #task_inner_ident(#(#full_args,)*)
+            }
+        }
+
+        #[derive(Clone, Copy)]
+        struct #task_handle_ty {
+            task: &'static ::zeptos::Task<<() as #trait_ident>::Fut>,
+        }
+
+        impl #task_handle_ty {
+            pub fn spawn(self, #fargs) {
+                unsafe {
+                    self.task.spawn(<() as #trait_ident>::construct(#(#full_args,)*))
+                }
+            }
+
+            pub fn cancel(self) {
+                unsafe {
+                    self.task.cancel()
+                }
+
+            }
+
+            pub fn is_running(self) -> bool {
+                unsafe {
+                    self.task.is_running()
+                }
+            }
+        }
 
         #task_outer
     };

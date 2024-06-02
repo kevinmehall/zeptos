@@ -43,17 +43,6 @@ impl Spawner {
     pub unsafe fn steal() -> Spawner {
         Spawner { _not_send: PhantomData }
     }
-
-    pub fn spawn_task<F: Future + 'static>(&self, token: SpawnToken<F>) {
-        unsafe {
-            token.task.spawn(token.fut);
-        }
-    }
-}
-
-pub struct SpawnToken<T: Future + 'static>{
-    task: &'static Task<T>,
-    fut: T
 }
 
 #[derive(Clone, Copy)]
@@ -93,11 +82,6 @@ impl<F: Future + 'static> Task<F> {
         }
     }
 
-    #[doc(hidden)]
-    pub fn _spawn_token(self: &'static Task<F>, fut: F) -> SpawnToken<F> {
-        SpawnToken { task: self, fut }
-    }
-
     unsafe fn drop(&self) {
         unsafe {
             drop_in_place((*self.fut.get()).as_mut_ptr());
@@ -105,7 +89,7 @@ impl<F: Future + 'static> Task<F> {
         self.state.set(TaskState::Dead);
     }
 
-    unsafe fn cancel(&self) {
+    pub unsafe fn cancel(&self) {
         match self.state.get() {
             TaskState::Dead => {},
             TaskState::Idle => self.drop(),
@@ -113,12 +97,19 @@ impl<F: Future + 'static> Task<F> {
         }
     }
 
-    unsafe fn spawn(&'static self, fut: F) {
+    pub unsafe fn spawn(&'static self, fut: F) {
         unsafe {
             self.cancel();
             self.state.set(TaskState::Idle);
             (*self.fut.get()).write(fut);
             self.poll();
+        }
+    }
+
+    pub unsafe fn is_running(&self) -> bool {
+        match self.state.get() {
+            TaskState::Dead => false,
+            TaskState::Idle | TaskState::Polling | TaskState::PollingPending => true,
         }
     }
 
