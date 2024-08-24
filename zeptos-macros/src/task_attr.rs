@@ -87,7 +87,7 @@ pub fn run(args: &[NestedMeta], f: syn::ItemFn) -> Result<TokenStream, TokenStre
     }
 
     let mut task_outer: ItemFn = parse_quote! {
-        #visibility fn #task_ident(s: ::zeptos::Spawner) -> #task_handle_ty {
+        #visibility fn #task_ident(s: ::zeptos::Runtime) -> #task_handle_ty {
             static TASK: ::zeptos::Task<<() as #trait_ident>::Fut> = ::zeptos::Task::new();
             #task_handle_ty { task: &TASK }
         }
@@ -104,6 +104,7 @@ pub fn run(args: &[NestedMeta], f: syn::ItemFn) -> Result<TokenStream, TokenStre
         #[doc(hidden)]
         #task_inner
 
+        #[allow(non_camel_case_types)]
         trait #trait_ident {
             type Fut: ::core::future::Future + 'static;
             fn construct(#fargs) -> Self::Fut;
@@ -116,6 +117,7 @@ pub fn run(args: &[NestedMeta], f: syn::ItemFn) -> Result<TokenStream, TokenStre
             }
         }
 
+        #[allow(non_camel_case_types)]
         #[derive(Clone, Copy)]
         struct #task_handle_ty {
             task: &'static ::zeptos::Task<<() as #trait_ident>::Fut>,

@@ -1,12 +1,19 @@
-use core::{cell::Cell, future::Future, pin::Pin, ptr, task::{Context, Poll, RawWaker, RawWakerVTable, Waker}};
+use core::{
+    cell::Cell,
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll, Waker},
+};
 
 pub struct Interrupt {
-    waker: Cell<Option<Waker>>
+    waker: Cell<Option<Waker>>,
 }
 
 impl Interrupt {
     pub const fn new() -> Self {
-        Self { waker: Cell::new(None) }
+        Self {
+            waker: Cell::new(None),
+        }
     }
 
     pub fn subscribe(&self, waker: Waker) {
@@ -24,7 +31,6 @@ impl Interrupt {
             interrupt: self,
             condition,
         }
-
     }
 }
 
@@ -47,25 +53,39 @@ impl<F: Fn() -> bool> Future for Until<'_, F> {
     }
 }
 
+/// Send + Sync wrapper for a value that is not Send + Sync but can only be accessed from a task.
 #[repr(transparent)]
-pub struct RacyCell<T>(T);
+pub struct TaskOnly<T>(T);
 
-impl<T> RacyCell<T> {
-    pub const fn new(v: T) -> Self {
-        RacyCell(v)
+impl<T> TaskOnly<T> {
+    /// Wrap a value.
+    ///
+    /// SAFETY: This is the equivalent of sending T to the
+    /// task thread. You must either be on the task thread
+    /// or T must be Send.
+    pub const unsafe fn new(v: T) -> Self {
+        TaskOnly(v)
     }
+
+    /// Get the wrapped value.
+    ///
+    /// SAFETY: must only be called from inside a task,
+    /// and not another core or an ISR at higher privilige.
     pub const unsafe fn get(&self) -> &T {
         &self.0
     }
 }
 
-unsafe impl<T> Send for RacyCell<T> {}
-unsafe impl<T> Sync for RacyCell<T> {}
+unsafe impl<T> Send for TaskOnly<T> {}
+unsafe impl<T> Sync for TaskOnly<T> {}
 
 #[macro_export]
 macro_rules! isr {
-    ($attr:path, $name:ident) => {{
-        static I: $crate::RacyCell<$crate::Interrupt> = $crate::RacyCell::new($crate::Interrupt::new());
+    ($attr:ident, $name:ident) => {{
+        use ::cortex_m_rt::$attr;
+
+        static I: $crate::TaskOnly<$crate::Interrupt> =
+            unsafe { $crate::TaskOnly::new($crate::Interrupt::new()) };
 
         #[$attr]
         fn $name() {
@@ -73,24 +93,19 @@ macro_rules! isr {
         }
 
         unsafe { I.get() }
-    }}
+    }};
 }
 
 #[macro_export]
 macro_rules! interrupt {
-    ($name:ident) => { $crate::isr!(interrupt, $name) }
+    ($name:ident) => {
+        $crate::isr!(interrupt, $name)
+    };
 }
 
 #[macro_export]
 macro_rules! exception {
-    ($name:ident) => { $crate::isr!(exception, $name) }
+    ($name:ident) => {
+        $crate::isr!(exception, $name)
+    };
 }
-
-static NO_OP_VTABLE: RawWakerVTable = RawWakerVTable::new(
-    |d| RawWaker::new(d, &NO_OP_VTABLE),
-    |_| {},
-    |_| {},
-    |_| {},
-);
-
-

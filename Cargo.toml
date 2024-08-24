@@ -7,5 +7,5 @@ edition = "2021"
 
 [dependencies]
 cortex-m = "0.7.7"
-cortex-m-rt = "0.7.4"
+cortex-m-rt = "0.7.3"
 zeptos-macros = { path = "./zeptos-macros" }

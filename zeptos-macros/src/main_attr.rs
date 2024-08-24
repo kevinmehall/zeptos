@@ -14,8 +14,11 @@ pub fn cortex_m() -> TokenStream {
     quote! {
         #[::zeptos::internal::cortex_m_rt::entry]
         fn main() -> ! {
+            // Ensure the vector table is linked, if the bin crate doesn't use c-m-rt directly
+            use cortex_m_rt as _;
+
             unsafe { zeptos::internal::pre_init(); }
-            let spawner = unsafe { ::zeptos::Spawner::steal() };
+            let spawner = unsafe { ::zeptos::Runtime::steal() };
             __main_task(spawner).spawn(spawner);
             unsafe { zeptos::internal::post_init(); }
         }

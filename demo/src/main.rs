@@ -5,20 +5,18 @@
 use panic_probe as _;
 use defmt_rtt as _;
 
-use zeptos::Spawner;
-use atsamd21e::{ interrupt, CorePeripherals };
-use cortex_m_rt::exception;
-use cortex_m::peripheral::{syst, SYST};
+use zeptos::Runtime;
+use atsamd21e::CorePeripherals;
+use cortex_m::peripheral::SYST;
 
 const SYST_CSR_ENABLE: u32 = 1 << 0;
 const SYST_CSR_TICKINT: u32 = 1 << 1;
 const SYST_CSR_CLKSOURCE: u32 = 1 << 2;
 const SYST_CSR_COUNTFLAG: u32 = 1 << 16;
 
-
 #[zeptos::main]
-async fn main(sp: Spawner) {
-    let mut core = unsafe { CorePeripherals::steal() };
+async fn main(sp: Runtime) {
+    let core = unsafe { CorePeripherals::steal() };
     let interrupt = zeptos::exception!(SysTick);
 
     defmt::info!("main");
