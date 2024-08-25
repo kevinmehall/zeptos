@@ -86,16 +86,6 @@ pub fn run(args: &[NestedMeta], f: syn::ItemFn) -> Result<TokenStream, TokenStre
         ));
     }
 
-    let mut task_outer: ItemFn = parse_quote! {
-        #visibility fn #task_ident(s: ::zeptos::Runtime) -> #task_handle_ty {
-            static TASK: ::zeptos::Task<<() as #trait_ident>::Fut> = ::zeptos::Task::new();
-            #task_handle_ty { task: &TASK }
-        }
-    };
-
-
-    task_outer.attrs.append(&mut task_inner.attrs.clone());
-
     let result = quote! {
         // This is the user's task function, renamed.
         // We put it outside the #task_ident fn below, because otherwise
@@ -119,32 +109,52 @@ pub fn run(args: &[NestedMeta], f: syn::ItemFn) -> Result<TokenStream, TokenStre
 
         #[allow(non_camel_case_types)]
         #[derive(Clone, Copy)]
-        struct #task_handle_ty {
-            task: &'static ::zeptos::Task<<() as #trait_ident>::Fut>,
-        }
+        struct #task_handle_ty {}
 
         impl #task_handle_ty {
             pub fn spawn(self, #fargs) {
                 unsafe {
-                    self.task.spawn(<() as #trait_ident>::construct(#(#full_args,)*))
+                    <Self as ::zeptos::Task>::storage().spawn(<() as #trait_ident>::construct(#(#full_args,)*))
                 }
             }
 
             pub fn cancel(self) {
                 unsafe {
-                    self.task.cancel()
+                    <Self as ::zeptos::Task>::storage().cancel()
                 }
 
             }
 
             pub fn is_running(self) -> bool {
                 unsafe {
-                    self.task.is_running()
+                    <Self as ::zeptos::Task>::storage().is_running()
                 }
             }
         }
 
-        #task_outer
+        #visibility fn #task_ident(s: ::zeptos::Runtime) -> #task_handle_ty {
+            static TASK: ::zeptos::TaskStorage::<#task_handle_ty> = ::zeptos::TaskStorage::new();
+            static VTABLE: ::core::task::RawWakerVTable = ::core::task::RawWakerVTable::new(
+                ::zeptos::TaskStorage::<#task_handle_ty>::waker_clone,
+                ::zeptos::TaskStorage::<#task_handle_ty>::waker_wake,
+                ::zeptos::TaskStorage::<#task_handle_ty>::waker_wake,
+                drop
+            );
+
+            impl ::zeptos::Task for #task_handle_ty {
+                type Fut = <() as #trait_ident>::Fut;
+
+                fn storage() -> &'static ::zeptos::TaskStorage<Self> {
+                    &TASK
+                }
+
+                fn vtable() -> &'static ::core::task::RawWakerVTable {
+                    &VTABLE
+                }
+            }
+
+            #task_handle_ty { }
+        }
     };
 
     Ok(result)

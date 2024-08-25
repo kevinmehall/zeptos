@@ -13,33 +13,42 @@ pub(crate) enum TaskState {
     PollingPending,
 }
 
-pub struct Task<F> {
-    pub(crate) state: Cell<TaskState>,
-    pub(crate) fut: UnsafeCell<MaybeUninit<F>>,
-    pub(crate) vtable: RawWakerVTable,
+/// Trait for a ZST that represents a task
+pub trait Task: Sized + 'static {
+    type Fut: Future + 'static;
+    
+    fn storage() -> &'static TaskStorage<Self>;
+    fn vtable() -> &'static RawWakerVTable;
+
+    unsafe fn poll_fn() {
+        Self::storage().poll()
+    }
 }
 
-unsafe impl<F> Send for Task<F> {}
 
-unsafe impl<F> Sync for Task<F> {}
+#[repr(C)]
+pub struct TaskStorage<T: Task> {
+    pub(crate) state: Cell<TaskState>,
+    pub(crate) fut: UnsafeCell<MaybeUninit<T::Fut>>,
+}
 
-impl<F: Future + 'static> Task<F> {
+unsafe impl<T: Task> Send for TaskStorage<T> {}
+
+unsafe impl<T: Task> Sync for TaskStorage<T> {}
+
+impl<T: Task> TaskStorage<T> {
+    pub unsafe fn waker_clone(d: *const ()) -> RawWaker {
+        RawWaker::new(d, T::vtable())
+    }
+
+    pub unsafe fn waker_wake(_: *const ()) {
+        T::poll_fn()
+    }
+
     pub const fn new() -> Self {
-        Task {
+        TaskStorage {
             state: Cell::new(TaskState::Dead),
             fut: UnsafeCell::new(MaybeUninit::uninit()),
-            vtable: RawWakerVTable::new(
-                |d| {
-                    let task: &'static Self = unsafe { &*(d as *const Self) };
-                    RawWaker::new(d, &task.vtable)
-                },
-                |d| {
-                    unsafe { (*(d as *const Self)).poll() }
-                },
-                |d| {
-                    unsafe { (*(d as *const Self)).poll() }
-                }
-            , drop)
         }
     }
 
@@ -58,12 +67,12 @@ impl<F: Future + 'static> Task<F> {
         }
     }
 
-    pub unsafe fn spawn(&'static self, fut: F) {
+    pub unsafe fn spawn(&'static self, fut: T::Fut) {
         unsafe {
             self.cancel();
             self.state.set(TaskState::Idle);
             (*self.fut.get()).write(fut);
-            self.poll();
+            T::poll_fn()
         }
     }
 
@@ -85,7 +94,7 @@ impl<F: Future + 'static> Task<F> {
                 // Safety: If state is Idle, we know the future is initialized, and we are not inside another call to poll.
                 let mut fut = unsafe { Pin::new_unchecked((*self.fut.get()).assume_init_mut()) };
 
-                let waker = ManuallyDrop::new(Waker::from_raw(RawWaker::new(self as *const Self as *const (), &self.vtable))); // TODO: LocalWaker
+                let waker = ManuallyDrop::new(Waker::from_raw(RawWaker::new(self as *const Self as *const (), T::vtable()))); // TODO: LocalWaker
 
                 loop {
                     self.state.set(TaskState::Polling);

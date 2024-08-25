@@ -9,7 +9,9 @@ mod interrupt;
 pub use interrupt::{Interrupt, TaskOnly};
 
 mod task;
-pub use task::Task;
+pub use task::{Task, TaskStorage};
+
+pub mod cortex_m;
 
 #[doc(hidden)]
 pub mod internal {
