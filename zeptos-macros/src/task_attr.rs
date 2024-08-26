@@ -2,7 +2,7 @@ use darling::export::NestedMeta;
 use darling::FromMeta;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_quote, ItemFn, ReturnType, Type};
+use syn::{ReturnType, Type};
 
 use crate::ctxt::Ctxt;
 

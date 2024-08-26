@@ -17,9 +17,9 @@ pub fn cortex_m() -> TokenStream {
             // Ensure the vector table is linked, if the bin crate doesn't use c-m-rt directly
             use cortex_m_rt as _;
 
-            unsafe { zeptos::internal::pre_init(); }
-            let spawner = unsafe { ::zeptos::Runtime::steal() };
-            __main_task(spawner).spawn(spawner);
+            let rt = unsafe { ::zeptos::Runtime::steal() };
+            let hw = unsafe { zeptos::internal::pre_init(rt) };
+            __main_task(rt).spawn(rt, hw);
             unsafe { zeptos::internal::post_init(); }
         }
     }
@@ -60,8 +60,8 @@ pub fn run(args: &[NestedMeta], f: syn::ItemFn, main: TokenStream) -> Result<Tok
         },
     }
 
-    if fargs.len() != 1 {
-        ctxt.error_spanned_by(&f.sig, "main function must have 1 argument: the spawner.");
+    if fargs.len() != 2 {
+        ctxt.error_spanned_by(&f.sig, "main function must have 2 arguments: rt: Runtime, hw: Hardware.");
     }
 
     ctxt.check()?;

@@ -5,6 +5,8 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
+use crate::Runtime;
+
 use super::RunQueueNode;
 
 pub struct Interrupt {
@@ -77,8 +79,13 @@ impl<T> TaskOnly<T> {
     ///
     /// SAFETY: must only be called from inside a task,
     /// and not another core or an ISR at higher privilige.
-    pub const unsafe fn get(&self) -> &T {
+    pub const unsafe fn get_unchecked(&self) -> &T {
         &self.0
+    }
+
+    /// Get the wrapped value.
+    pub const fn get(&self, _runtime: Runtime) -> &T {
+        unsafe { self.get_unchecked() }
     }
 }
 

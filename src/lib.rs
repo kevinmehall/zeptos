@@ -14,9 +14,15 @@ pub mod cortex_m;
 pub mod internal {
     pub use cortex_m_rt;
 
+    use crate::{ cortex_m::SysTick, Hardware, Runtime };
+
     #[inline(always)]
-    pub unsafe fn pre_init() {
+    pub unsafe fn pre_init(rt: Runtime) -> Hardware {
         cortex_m::interrupt::disable();
+
+        Hardware {
+            syst: SysTick::init(rt)
+        }
     }
 
     #[inline(always)]
@@ -44,4 +50,8 @@ impl Runtime {
             _not_send: PhantomData,
         }
     }
+}
+
+pub struct Hardware {
+    pub syst: cortex_m::SysTick,
 }
