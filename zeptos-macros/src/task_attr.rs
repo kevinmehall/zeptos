@@ -114,42 +114,50 @@ pub fn run(args: &[NestedMeta], f: syn::ItemFn) -> Result<TokenStream, TokenStre
         impl #task_handle_ty {
             pub fn spawn(self, #fargs) {
                 unsafe {
-                    <Self as ::zeptos::Task>::storage().spawn(<() as #trait_ident>::construct(#(#full_args,)*))
+                    <Self as ::zeptos::executor::Task>::storage().spawn(<() as #trait_ident>::construct(#(#full_args,)*))
                 }
             }
 
             pub fn cancel(self) {
                 unsafe {
-                    <Self as ::zeptos::Task>::storage().cancel()
+                    <Self as ::zeptos::executor::Task>::storage().cancel()
                 }
 
             }
 
             pub fn is_running(self) -> bool {
                 unsafe {
-                    <Self as ::zeptos::Task>::storage().is_running()
+                    <Self as ::zeptos::executor::Task>::storage().is_running()
                 }
             }
         }
 
         #visibility fn #task_ident(s: ::zeptos::Runtime) -> #task_handle_ty {
-            static TASK: ::zeptos::TaskStorage::<#task_handle_ty> = ::zeptos::TaskStorage::new();
-            static VTABLE: ::core::task::RawWakerVTable = ::core::task::RawWakerVTable::new(
-                ::zeptos::TaskStorage::<#task_handle_ty>::waker_clone,
-                ::zeptos::TaskStorage::<#task_handle_ty>::waker_wake,
-                ::zeptos::TaskStorage::<#task_handle_ty>::waker_wake,
-                drop
-            );
+            static STORAGE: ::zeptos::executor::TaskStorage::<#task_handle_ty> = ::zeptos::executor::TaskStorage::new();
+            static NODE: ::zeptos::executor::RunQueueNode = ::zeptos::executor::RunQueueNode::new(poll);
 
-            impl ::zeptos::Task for #task_handle_ty {
+            unsafe fn poll() {
+                unsafe {
+                    STORAGE.poll()
+                }
+            }
+
+            impl ::zeptos::executor::Task for #task_handle_ty {
                 type Fut = <() as #trait_ident>::Fut;
 
-                fn storage() -> &'static ::zeptos::TaskStorage<Self> {
-                    &TASK
+                #[inline(always)]
+                fn storage() -> &'static ::zeptos::executor::TaskStorage<Self> {
+                    &STORAGE
                 }
 
-                fn vtable() -> &'static ::core::task::RawWakerVTable {
-                    &VTABLE
+                #[inline(always)]
+                fn node() -> &'static ::zeptos::executor::RunQueueNode {
+                    &NODE
+                }
+
+                #[inline(always)]
+                unsafe fn poll() {
+                    unsafe { poll() }
                 }
             }
 

@@ -1,15 +1,12 @@
 #![no_std]
+#![feature(waker_getters)]
 
 use core::marker::PhantomData;
 
 pub use zeptos_macros::main_cortex_m as main;
 pub use zeptos_macros::task;
 
-mod interrupt;
-pub use interrupt::{Interrupt, TaskOnly};
-
-mod task;
-pub use task::{Task, TaskStorage};
+pub mod executor;
 
 pub mod cortex_m;
 

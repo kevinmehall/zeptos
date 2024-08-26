@@ -5,24 +5,30 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
+use super::RunQueueNode;
+
 pub struct Interrupt {
-    waker: Cell<Option<Waker>>,
+    poll_fn: Cell<Option<unsafe fn()>>,
 }
 
 impl Interrupt {
     pub const fn new() -> Self {
         Self {
-            waker: Cell::new(None),
+            poll_fn: Cell::new(None),
         }
     }
 
-    pub fn subscribe(&self, waker: Waker) {
-        self.waker.set(Some(waker))
+    fn subscribe(&self, waker: &Waker) {
+        if waker.as_raw().vtable() != &super::VTABLE {
+            panic!("interrupt passed a waker from another executor");
+        }
+        let node = unsafe { &*(waker.as_raw().data() as *mut RunQueueNode) };
+        self.poll_fn.set(Some(node.func()))
     }
 
-    pub fn notify(&self) {
-        if let Some(waker) = self.waker.take() {
-            waker.wake();
+    pub unsafe fn notify(&self) {
+        if let Some(poll) = self.poll_fn.take() {
+            unsafe { poll() }
         }
     }
 
@@ -47,7 +53,7 @@ impl<F: Fn() -> bool> Future for Until<'_, F> {
         if (self.condition)() {
             Poll::Ready(())
         } else {
-            self.interrupt.subscribe(cx.waker().clone());
+            self.interrupt.subscribe(cx.waker());
             Poll::Pending
         }
     }
@@ -84,12 +90,12 @@ macro_rules! isr {
     ($attr:ident, $name:ident) => {{
         use ::cortex_m_rt::$attr;
 
-        static I: $crate::TaskOnly<$crate::Interrupt> =
-            unsafe { $crate::TaskOnly::new($crate::Interrupt::new()) };
+        static I: $crate::executor::TaskOnly<$crate::executor::Interrupt> =
+            unsafe { $crate::executor::TaskOnly::new($crate::executor::Interrupt::new()) };
 
         #[$attr]
         fn $name() {
-            unsafe { I.get() }.notify()
+            unsafe { I.get().notify() }
         }
 
         unsafe { I.get() }
