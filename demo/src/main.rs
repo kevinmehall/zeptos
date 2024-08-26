@@ -3,18 +3,18 @@
 #![feature(impl_trait_in_assoc_type)]
 
 use panic_probe as _;
-use defmt_rtt as _;
 
-use zeptos::{ Runtime, Hardware };
-use atsamd21e::CorePeripherals;
+use zeptos::{ Runtime, Hardware, samd::gpio::{self, TypePin} };
 
 #[zeptos::main]
 async fn main(_sp: Runtime, hw: Hardware) {
-    defmt::info!("main");
+    gpio::PB30::dirset();
     let mut syst = hw.syst;
 
     loop {
-        syst.delay(1_000_000).await;
-        defmt::info!("tick");
+        syst.delay(100_000).await;
+        gpio::PB30::outset();
+        syst.delay(900_000).await;
+        gpio::PB30::outclr();
     }
 }

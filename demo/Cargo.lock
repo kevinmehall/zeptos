@@ -3,10 +3,10 @@
 version = 3
 
 [[package]]
-name = "atsamd21e"
+name = "atsamd21j"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f9f8273c3130e3c0de8f74d6060a0c295ce5af109614981eb3d61eae1ef0f45"
+checksum = "26f39050408228bfd16153a60dfa212c9eae16275a698e4f7bac93c746003147"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -348,6 +348,7 @@ dependencies = [
 name = "zeptos"
 version = "0.1.0"
 dependencies = [
+ "atsamd21j",
  "cortex-m",
  "cortex-m-rt",
  "zeptos-macros",
@@ -357,7 +358,6 @@ dependencies = [
 name = "zeptos-demo"
 version = "0.1.0"
 dependencies = [
- "atsamd21e",
  "cortex-m",
  "cortex-m-rt",
  "defmt",

@@ -10,6 +10,9 @@ pub mod executor;
 
 pub mod cortex_m;
 
+#[cfg(any(feature="samd11", feature="samd21"))]
+pub mod samd;
+
 #[doc(hidden)]
 pub mod internal {
     pub use cortex_m_rt;

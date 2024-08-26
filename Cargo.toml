@@ -9,3 +9,13 @@ edition = "2021"
 cortex-m = "0.7.7"
 cortex-m-rt = "0.7.3"
 zeptos-macros = { path = "./zeptos-macros" }
+
+atsamd11d = { version = "0.13.0", optional = true, features = ["rt"] }
+atsamd21j = { version = "0.13.0", optional = true, features = ["rt"] }
+
+[features]
+# Hardware support
+samd21 = ["dep:atsamd21j"]
+samd11 = ["dep:atsamd11d"]
+
+
