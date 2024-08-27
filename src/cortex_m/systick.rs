@@ -40,5 +40,10 @@ impl SysTick {
         }).await;
         unsafe { self.registers().csr.write(0); }
     }
+
+    #[cfg(feature="clock")]
+    pub async fn delay_us(&mut self, us: u32) {
+        self.delay(us * (crate::CLOCK_HZ / 1_000_000)).await
+    }
 }
 

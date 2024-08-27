@@ -12,9 +12,9 @@ async fn main(_sp: Runtime, hw: Hardware) {
     let mut syst = hw.syst;
 
     loop {
-        syst.delay(100_000).await;
+        syst.delay_us(100_000).await;
         gpio::PB30::outset();
-        syst.delay(900_000).await;
+        syst.delay_us(200_000).await;
         gpio::PB30::outclr();
     }
 }

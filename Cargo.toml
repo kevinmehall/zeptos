@@ -18,4 +18,11 @@ atsamd21j = { version = "0.13.0", optional = true, features = ["rt"] }
 samd21 = ["dep:atsamd21j"]
 samd11 = ["dep:atsamd11d"]
 
+samd-clock-48m-usb = ["clock"]
+samd-clock-48m-internal = ["clock"]
+samd-clock-48m-external-32k-xtal = ["clock"]
+samd-clock-48m-external-32k-osc = ["clock"]
+
+clock = []
+
 

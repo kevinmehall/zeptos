@@ -13,6 +13,14 @@ pub mod cortex_m;
 #[cfg(any(feature="samd11", feature="samd21"))]
 pub mod samd;
 
+#[cfg(any(
+    feature="samd-clock-48m-usb",
+    feature="samd-clock-48m-internal",
+    feature="samd-clock-48m-external-32k-osc",
+    feature="samd-clock-48m-external-32k-xtal",
+))]
+pub const CLOCK_HZ: u32 = 48_000_000;
+
 #[doc(hidden)]
 pub mod internal {
     pub use cortex_m_rt;
@@ -22,6 +30,14 @@ pub mod internal {
     #[inline(always)]
     pub unsafe fn pre_init(rt: Runtime) -> Hardware {
         cortex_m::interrupt::disable();
+
+        #[cfg(any(
+            feature="samd-clock-48m-usb",
+            feature="samd-clock-48m-internal",
+            feature="samd-clock-48m-external-32k-osc",
+            feature="samd-clock-48m-external-32k-xtal",
+        ))]
+        crate::samd::clock::configure_clocks();
 
         Hardware {
             syst: SysTick::init(rt)
