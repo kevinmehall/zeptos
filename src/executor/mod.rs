@@ -39,8 +39,15 @@ pub unsafe fn waker_wake(p: *const ()) {
 
 #[repr(C)]
 pub struct TaskStorage<T: Task> {
-    pub(crate) running: Cell<bool>,
-    pub(crate) fut: UnsafeCell<MaybeUninit<T::Fut>>,
+    state: Cell<TaskState>,
+    fut: UnsafeCell<MaybeUninit<T::Fut>>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TaskState {
+    Dead,
+    Running,
+    Polling,
 }
 
 unsafe impl<T: Task> Send for TaskStorage<T> {}
@@ -49,23 +56,25 @@ unsafe impl<T: Task> Sync for TaskStorage<T> {}
 impl<T: Task> TaskStorage<T> {
     pub const fn new() -> Self {
         TaskStorage {
-            running: Cell::new(false),
+            state: Cell::new(TaskState::Dead),
             fut: UnsafeCell::new(MaybeUninit::uninit()),
         }
     }
 
-    /// SAFETY: must be called from the runtime thread and the task must be running
+    /// SAFETY: must be called from the runtime thread and the task must be in state idle
     pub(crate) unsafe fn drop(&self) {
         unsafe {
             drop_in_place((*self.fut.get()).as_mut_ptr());
         }
-        self.running.set(false);
+        self.state.set(TaskState::Dead);
     }
 
     /// SAFETY: must be called from the runtime thread
     pub unsafe fn cancel(&self) {
-        if self.running.get() {
-            self.drop()
+        match self.state.get() {
+            TaskState::Dead => {}
+            TaskState::Running => self.drop(),
+            TaskState::Polling => panic!("task canceled itself"),
         }
     }
 
@@ -73,7 +82,7 @@ impl<T: Task> TaskStorage<T> {
     pub unsafe fn spawn(&'static self, fut: T::Fut) {
         unsafe {
             self.cancel();
-            self.running.set(true);
+            self.state.set(TaskState::Running);
             (*self.fut.get()).write(fut);
             T::poll()
         }
@@ -81,13 +90,15 @@ impl<T: Task> TaskStorage<T> {
 
     /// SAFETY: must be called from the runtime thread
     pub unsafe fn is_running(&self) -> bool {
-        self.running.get()
+        self.state.get() != TaskState::Dead
     }
 
-    /// SAFETY: must be called from the runtime thread, and must not be called re-entrantly
+    /// SAFETY: must be called from the runtime thread
     pub unsafe fn poll(&'static self) {
-        if self.running.get() {
-            // Safety: If state is Idle, we know the future is initialized, and we are not inside another call to poll.
+        if self.state.get() == TaskState::Running {
+            self.state.set(TaskState::Polling);
+
+            // Safety: If state was Running, we know the future is initialized, and we are not inside another call to poll.
             let mut fut = unsafe { Pin::new_unchecked((*self.fut.get()).assume_init_mut()) };
 
             let waker = ManuallyDrop::new(Waker::from_raw(RawWaker::new(T::node() as *const _ as *mut _, &VTABLE)));
@@ -97,7 +108,9 @@ impl<T: Task> TaskStorage<T> {
                     drop(fut);
                     self.drop();
                 }
-                Poll::Pending => {},
+                Poll::Pending => {
+                    self.state.set(TaskState::Running);
+                },
             }
         }
     }
