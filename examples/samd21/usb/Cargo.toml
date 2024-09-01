@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-zeptos = { path = "../", features = ["samd21", "samd-clock-48m-external-32k-xtal"] }
+zeptos = { path = "../../../", features = ["samd21", "samd-clock-48m-usb", "usb"] }
 panic-probe = "0.3"
 defmt = "0.3.6"
 defmt-rtt = "0.4.0"
@@ -13,6 +13,10 @@ cortex-m-rt = "0.7.3"
 [dependencies.cortex-m]
 version = "0.7"
 features = ["critical-section-single-core", "inline-asm"]
+
+[dependencies.usb]
+git = "https://github.com/kevinmehall/rust-usb.git"
+rev = "cb0599102313de79d34d4be4bb37f2c25e480ba6"
 
 [profile.dev]
 incremental = false

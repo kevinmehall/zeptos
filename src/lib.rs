@@ -13,6 +13,9 @@ pub mod cortex_m;
 #[cfg(any(feature="samd11", feature="samd21"))]
 pub mod samd;
 
+#[cfg(any(feature="usb"))]
+pub mod usb;
+
 #[cfg(any(
     feature="samd-clock-48m-usb",
     feature="samd-clock-48m-internal",
@@ -31,16 +34,14 @@ pub mod internal {
     pub unsafe fn pre_init(rt: Runtime) -> Hardware {
         cortex_m::interrupt::disable();
 
-        #[cfg(any(
-            feature="samd-clock-48m-usb",
-            feature="samd-clock-48m-internal",
-            feature="samd-clock-48m-external-32k-osc",
-            feature="samd-clock-48m-external-32k-xtal",
-        ))]
-        crate::samd::clock::configure_clocks();
-
+        #[cfg(any(feature = "samd11", feature = "samd21"))]
+        crate::samd::init();
+        
         Hardware {
-            syst: SysTick::init(rt)
+            syst: SysTick::init(rt),
+
+            #[cfg(all(feature = "usb"))]
+            usb: crate::usb::Usb::new(rt),
         }
     }
 
@@ -73,4 +74,7 @@ impl Runtime {
 
 pub struct Hardware {
     pub syst: cortex_m::SysTick,
+
+    #[cfg(feature = "usb")]
+    pub usb: usb::Usb,
 }

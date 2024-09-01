@@ -12,6 +12,14 @@ zeptos-macros = { path = "./zeptos-macros" }
 
 atsamd11d = { version = "0.13.0", optional = true, features = ["rt"] }
 atsamd21j = { version = "0.13.0", optional = true, features = ["rt"] }
+defmt = "0.3.8"
+pin-project-lite = "0.2.14"
+futures-util = { version = "0.3.30", default-features = false, features = ["async-await", "async-await-macro"] }
+scopeguard = { version = "1.2.0", default_features = false }
+
+[dependencies.usb]
+git = "https://github.com/kevinmehall/rust-usb.git"
+rev = "cb0599102313de79d34d4be4bb37f2c25e480ba6"
 
 [features]
 # Hardware support
@@ -22,6 +30,8 @@ samd-clock-48m-usb = ["clock"]
 samd-clock-48m-internal = ["clock"]
 samd-clock-48m-external-32k-xtal = ["clock"]
 samd-clock-48m-external-32k-osc = ["clock"]
+
+usb = []
 
 clock = []
 

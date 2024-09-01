@@ -20,7 +20,7 @@ impl Interrupt {
         }
     }
 
-    fn subscribe(&self, waker: &Waker) {
+    pub fn subscribe(&self, waker: &Waker) {
         if waker.as_raw().vtable() != &super::VTABLE {
             panic!("interrupt passed a waker from another executor");
         }
@@ -34,7 +34,7 @@ impl Interrupt {
         }
     }
 
-    pub fn until<'a, F: Fn() -> bool>(&'a self, condition: F) -> Until<'a, F> {
+    pub fn until<'a, F: Fn() -> R, R: UntilOutput>(&'a self, condition: F) -> Until<'a, F> {
         Until {
             interrupt: self,
             condition,
@@ -48,12 +48,34 @@ pub struct Until<'a, F> {
     condition: F,
 }
 
-impl<F: Fn() -> bool> Future for Until<'_, F> {
+pub trait UntilOutput {
+    type Output;
+
+    fn into_output(self) -> Option<Self::Output>;
+}
+
+impl UntilOutput for bool {
     type Output = ();
 
+    fn into_output(self) -> Option<Self::Output> {
+        self.then_some(())
+    }
+}
+
+impl<T> UntilOutput for Option<T> {
+    type Output = T;
+
+    fn into_output(self) -> Option<Self::Output> {
+        self
+    }
+}
+
+impl<F: Fn() -> R, R: UntilOutput> Future for Until<'_, F> {
+    type Output = R::Output;
+
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if (self.condition)() {
-            Poll::Ready(())
+        if let Some(r) = (self.condition)().into_output() {
+            Poll::Ready(r)
         } else {
             self.interrupt.subscribe(cx.waker());
             Poll::Pending
