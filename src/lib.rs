@@ -1,5 +1,4 @@
 #![no_std]
-#![feature(waker_getters)]
 
 use core::marker::PhantomData;
 

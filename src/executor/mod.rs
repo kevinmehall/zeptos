@@ -101,7 +101,7 @@ impl<T: Task> TaskStorage<T> {
             // Safety: If state was Running, we know the future is initialized, and we are not inside another call to poll.
             let mut fut = unsafe { Pin::new_unchecked((*self.fut.get()).assume_init_mut()) };
 
-            let waker = ManuallyDrop::new(Waker::from_raw(RawWaker::new(T::node() as *const _ as *mut _, &VTABLE)));
+            let waker = ManuallyDrop::new(Waker::new(T::node() as *const _ as *mut _, &VTABLE));
 
             match fut.as_mut().poll(&mut Context::from_waker(&waker)) {
                 Poll::Ready(_) => {

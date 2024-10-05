@@ -21,10 +21,10 @@ impl Interrupt {
     }
 
     pub fn subscribe(&self, waker: &Waker) {
-        if waker.as_raw().vtable() != &super::VTABLE {
+        if waker.vtable() != &super::VTABLE {
             panic!("interrupt passed a waker from another executor");
         }
-        let node = unsafe { &*(waker.as_raw().data() as *mut RunQueueNode) };
+        let node = unsafe { &*(waker.data() as *mut RunQueueNode) };
         self.poll_fn.set(Some(node.func()))
     }
 
