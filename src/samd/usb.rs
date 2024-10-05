@@ -336,7 +336,7 @@ impl UsbShared {
                 w.bk1rdy().set_bit()
             });
             ep_reg.epintenclr.write(|w| {
-                w.trcpt0().set_bit()
+                w.trcpt1().set_bit()
             });
         }
 
