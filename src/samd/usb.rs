@@ -119,13 +119,12 @@ impl EndpointBank {
         (pcksize & ((1 << 14) - 1)) as usize
     }
 
-    pub fn prepare_in(&self, packet_size: PacketSize, ptr: *mut u8, len: usize, zlp: bool) {
+    pub fn prepare_in(&self, packet_size: PacketSize, ptr: *mut u8, len: usize) {
         debug_assert!(len < (1 << 14));
         self.addr.store(ptr, Ordering::Relaxed);
         self.pcksize.store(
             (len as u32) // BYTE_COUNT
-            | (packet_size as u8 as u32) << 28 // SIZE
-            | (zlp as u32) << 31, // AUTO_ZLP
+            | (packet_size as u8 as u32) << 28, // SIZE
             Ordering::Relaxed,
         );
     }
@@ -316,20 +315,16 @@ impl UsbShared {
         }
     }
 
-    pub async fn transfer_in(&self, ep: u8, ptr: *const u8, len: usize, zlp: bool) {
+    pub async fn transfer_in(&self, ep: u8, ptr: *const u8, mut len: usize, zlp: bool) {
         assert!(ep & EP_DIR_MASK == EP_IN);
 
         let ep_reg = self.ep(ep);
         let ep_ram = self.ep_ram(ep);
 
-        ep_ram.prepare_in(PacketSize::Size64, ptr.cast_mut(), len, zlp);
-
-        // Writing to start the transfer gives hardware control of the buffer
-        compiler_fence(Ordering::Release);
-
-        ep_reg.epintflag.write(|w| w.trcpt1().set_bit());
-        ep_reg.epstatusset.write(|w| w.bk1rdy().set_bit());
-        ep_reg.epintenset.write(|w| w.trcpt1().set_bit());
+        ep_reg.epintflag.write(|w| {
+            w.trcpt1().set_bit();
+            w.trfail1().set_bit()
+        });
 
         scopeguard::defer! {
             ep_reg.epstatusclr.write(|w| {
@@ -340,12 +335,32 @@ impl UsbShared {
             });
         }
 
-        NOTIFY_EP_IN.get(self.rt)[(ep & 0b111) as usize]
-            .until(|| ep_reg.epintflag.read().trcpt1().bit_is_set())
-            .await;
+        loop {
+            ep_ram.prepare_in(PacketSize::Size64, ptr.cast_mut(), len);
 
-        // Reading trcpt1 means the hardware is done reading the buffer
-        compiler_fence(Ordering::Acquire)
+            // Writing to start the transfer gives hardware control of the buffer
+            compiler_fence(Ordering::SeqCst);
+
+            ep_reg.epstatusset.write(|w| w.bk1rdy().set_bit());
+            ep_reg.epintenset.write(|w| w.trcpt1().set_bit());
+
+            NOTIFY_EP_IN.get(self.rt)[(ep & 0b111) as usize]
+                .until(|| ep_reg.epintflag.read().trcpt1().bit_is_set())
+                .await;
+
+            // Reading trcpt1 means the hardware is done reading the buffer
+            compiler_fence(Ordering::SeqCst);
+
+            if zlp && len > 0 && len % 64 == 0 {
+                // Send a zero-length packet. The PCKSIZE.AUTO_ZLP bit could do this in hardware,
+                // but might be buggy -- observed AUTO_ZLP on one endpoint causing zero-length
+                // packets to be sent on a different endpoint that did not set AUTO_ZLP.
+                len = 0;
+                continue;
+            } else {
+                break;
+            }
+        }
     }
 
     pub async fn transfer_out(&self, ep: u8, ptr: *mut u8, len: usize) -> usize {
