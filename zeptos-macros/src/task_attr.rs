@@ -67,7 +67,7 @@ pub fn run(args: &[NestedMeta], f: syn::ItemFn) -> Result<TokenStream, TokenStre
     let task_ident = f.sig.ident.clone();
     let task_inner_ident = format_ident!("__{}_task", task_ident);
 
-    let task_handle_ty = format_ident!("__{}_handle", task_ident);
+    let task_handle_ty = format_ident!("__{}", task_ident);
     let trait_ident = format_ident!("__{}_trait", task_ident);
 
     let mut task_inner = f;
@@ -94,6 +94,7 @@ pub fn run(args: &[NestedMeta], f: syn::ItemFn) -> Result<TokenStream, TokenStre
         #[doc(hidden)]
         #task_inner
 
+        /// Use ATPIT to be able to name the Future type
         #[allow(non_camel_case_types)]
         trait #trait_ident {
             type Fut: ::core::future::Future + 'static;
@@ -132,35 +133,27 @@ pub fn run(args: &[NestedMeta], f: syn::ItemFn) -> Result<TokenStream, TokenStre
             }
         }
 
-        #visibility fn #task_ident(s: ::zeptos::Runtime) -> #task_handle_ty {
-            static STORAGE: ::zeptos::executor::TaskStorage::<#task_handle_ty> = ::zeptos::executor::TaskStorage::new();
-            static NODE: ::zeptos::executor::RunQueueNode = ::zeptos::executor::RunQueueNode::new(poll);
+        impl ::zeptos::executor::Task for #task_handle_ty {
+            type Fut = <() as #trait_ident>::Fut;
+
+            #[inline(always)]
+            fn storage() -> &'static ::zeptos::executor::TaskStorage<Self> {
+                static STORAGE: ::zeptos::executor::TaskStorage::<#task_handle_ty> = ::zeptos::executor::TaskStorage::new();
+                &STORAGE
+            }
+
+            #[inline(always)]
+            fn node() -> &'static ::zeptos::executor::RunQueueNode {
+                static NODE: ::zeptos::executor::RunQueueNode = ::zeptos::executor::RunQueueNode::new(<#task_handle_ty as ::zeptos::executor::Task>::poll);
+                &NODE
+            }
 
             unsafe fn poll() {
-                unsafe {
-                    STORAGE.poll()
-                }
+                unsafe { Self::storage().poll() }
             }
+        }
 
-            impl ::zeptos::executor::Task for #task_handle_ty {
-                type Fut = <() as #trait_ident>::Fut;
-
-                #[inline(always)]
-                fn storage() -> &'static ::zeptos::executor::TaskStorage<Self> {
-                    &STORAGE
-                }
-
-                #[inline(always)]
-                fn node() -> &'static ::zeptos::executor::RunQueueNode {
-                    &NODE
-                }
-
-                #[inline(always)]
-                unsafe fn poll() {
-                    unsafe { poll() }
-                }
-            }
-
+        #visibility fn #task_ident(s: ::zeptos::Runtime) -> #task_handle_ty {
             #task_handle_ty { }
         }
     };
