@@ -13,6 +13,9 @@ pub mod cortex_m;
 #[cfg(any(feature="samd11", feature="samd21"))]
 pub mod samd;
 
+#[cfg(any(feature="rp2040"))]
+pub mod rp;
+
 #[cfg(any(feature="usb"))]
 pub mod usb;
 
@@ -36,6 +39,9 @@ pub mod internal {
 
         #[cfg(any(feature = "samd11", feature = "samd21"))]
         crate::samd::init();
+
+        #[cfg(any(feature = "rp2040"))]
+        crate::rp::init();
         
         Hardware {
             syst: SysTick::init(rt),

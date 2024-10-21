@@ -2,7 +2,7 @@ use core::{
     cell::Cell, convert::Infallible, future::Future, marker::PhantomData, ops::{Deref, DerefMut}, pin::{pin, Pin}, task::{Context, Poll}
 };
 
-use defmt::{debug, error, info, panic, write, Format};
+use defmt::{debug, error, panic, write, Format};
 use pin_project::{pin_project, pinned_drop};
 use usb::endpoint_address::{DIR_MASK as EP_DIR_MASK, IN as EP_IN, OUT as EP_OUT};
 
@@ -13,6 +13,9 @@ use crate::executor::TaskOnly;
 
 #[cfg(any(feature = "samd11", feature = "samd21"))]
 pub use crate::samd::usb::{ Usb, UsbShared, Endpoint0 };
+
+#[cfg(any(feature = "rp2040"))]
+pub use crate::rp::usb::{ Usb, UsbShared, Endpoint0 };
 
 #[repr(C, align(4))]
 pub struct UsbBuffer<const SIZE: usize>([u8; SIZE]);
