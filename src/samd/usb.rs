@@ -1,6 +1,8 @@
-use core::mem;
+use core::future::Future;
+use core::{mem, pin::pin};
 use core::ops::Deref;
 use core::sync::atomic::{compiler_fence, AtomicPtr, AtomicU16, AtomicU32, AtomicU8, Ordering};
+use core::task::{ready, Context, Poll};
 
 use crate::executor::{Interrupt, TaskOnly};
 use crate::samd::calibration;
@@ -203,55 +205,46 @@ impl Usb {
             w.spdconf().fs();
             w.detach().clear_bit()
         });
+
+        self.usb().intenset.write(|w| w.eorst().set_bit());
     }
 
     pub fn detach(&mut self) {
         self.usb().ctrlb.write(|w| w.detach().set_bit());
+
+        self.usb().intenclr.write(|w| w.eorst().set_bit());
+
+        self.ep(0).epintenclr.write(|w| w.rxstp().set_bit());
     }
 
-    pub(crate) async fn bus_event(&self) -> Event {
-        self.usb().intenset.write(|w| w.eorst().set_bit());
-        scopeguard::defer! {
-            self.usb().intenclr.write(|w| w.eorst().set_bit());
-        }
-        NOTIFY_BUS_EVENT
-            .get(self.rt)
-            .until(|| {
-                let flags = self.usb().intflag.read();
+    pub fn poll_event(&self, cx: &mut Context) -> Poll<Event> {
+        NOTIFY_BUS_EVENT.get(self.rt).subscribe(cx.waker());
 
-                if flags.eorst().bit_is_set() {
-                    self.usb().intflag.write(|w| w.eorst().set_bit());
-                    Some(Event::Reset)
-                } else {
-                    None
-                }
-            })
-            .await
-    }
-
-    pub(crate) async fn receive_setup(&self) -> [u8; 8] {
+        let flags = self.usb().intflag.read();
         let ep_reg = self.ep(0);
-        ep_reg.epintenset.write(|w| w.rxstp().set_bit());
 
-        scopeguard::defer! {
-            ep_reg.epintenclr.write(|w| w.rxstp().set_bit());
+        if flags.eorst().bit_is_set() {
+            self.usb().intflag.write(|w| w.eorst().set_bit());
+            Poll::Ready(Event::Reset)
+        } else if ep_reg.epintflag.read().rxstp().bit_is_set() {
+            // Reading rxstp true means we have access to the setup buffer
+            compiler_fence(Ordering::Acquire);
+
+            let setup = unsafe { CONTROL_BUF[..8].try_into().unwrap() };
+
+            // once rxstp is cleared, the hardware may receive another packet
+            compiler_fence(Ordering::Release);
+
+            ep_reg.epintflag.write(|w| w.rxstp().set_bit());
+
+            Poll::Ready(Event::Setup(setup))
+        } else {
+            Poll::Pending
         }
+    }
 
-        NOTIFY_EP_OUT.get(self.rt)[0]
-            .until(|| ep_reg.epintflag.read().rxstp().bit_is_set())
-            .await;
-
-        // Reading rxstp true means we have access to the setup buffer
-        compiler_fence(Ordering::Acquire);
-
-        let setup = unsafe { CONTROL_BUF[..8].try_into().unwrap() };
-
-        // once rxstp is cleared, the hardware may receive another packet
-        compiler_fence(Ordering::Release);
-
-        ep_reg.epintflag.write(|w| w.rxstp().set_bit());
-
-        setup
+    pub unsafe fn ep0(&self) -> Endpoint0 {
+        Endpoint0 { usb: self.shared() }
     }
 }
 
@@ -273,12 +266,16 @@ impl UsbShared {
     }
 
     pub fn configure_ep0(&self) {
-        let ptr = unsafe { CONTROL_BUF.as_mut_ptr() };
+        let ptr = &raw mut CONTROL_BUF as *mut u8;
         self.ep_ram(0).prepare_out(PacketSize::Size64, ptr, 64);
-        self.ep(0).epcfg.write(|w| {
+        let ep_reg = self.ep(0);
+        
+        ep_reg.epcfg.write(|w| {
             w.eptype0().variant(1);
             w.eptype1().variant(1)
-        })
+        });
+
+        ep_reg.epintenset.write(|w| w.rxstp().set_bit());
     }
 
     pub fn stall_ep0(&self) {
@@ -315,7 +312,7 @@ impl UsbShared {
         }
     }
 
-    pub async fn transfer_in(&self, ep: u8, ptr: *const u8, mut len: usize, zlp: bool) {
+    pub async unsafe fn transfer_in(&self, ep: u8, ptr: *const u8, mut len: usize, zlp: bool) {
         assert!(ep & EP_DIR_MASK == EP_IN);
 
         let ep_reg = self.ep(ep);
@@ -363,7 +360,7 @@ impl UsbShared {
         }
     }
 
-    pub async fn transfer_out(&self, ep: u8, ptr: *mut u8, len: usize) -> usize {
+    pub async unsafe fn transfer_out(&self, ep: u8, ptr: *mut u8, len: usize) -> usize {
         assert!(ep & EP_DIR_MASK == EP_OUT);
 
         let ep_reg = self.ep(ep);
@@ -401,6 +398,50 @@ impl UsbShared {
     }
 }
 
+pub struct Endpoint0 {
+    pub(crate) usb: UsbShared
+}
+
+impl Endpoint0 {
+    pub async fn ep0_transfer_in(&mut self, mut data: &[u8], is_full: bool) {
+        loop {
+            // We want to be able to send an arbitrary slice, which may not be
+            // correctly aligned or in RAM (USB DMA can't read from flash), so copy
+            // a packet at a time to CONTROL_BUF
+            let buf = unsafe { &mut * &raw mut CONTROL_BUF };
+
+            let (pkt, remaining) = data.split_at(data.len().min(buf.len()));
+
+            buf[..pkt.len()].copy_from_slice(pkt);
+
+            unsafe {
+                self.usb.transfer_in(0x80, buf.as_ptr(), pkt.len(), false)
+                    .await;
+            }
+
+            if pkt.len() < 64 || (remaining.len() == 0 && is_full) {
+                break;
+            }
+
+            data = remaining;
+        }
+    }
+    
+    pub async fn ep0_transfer_out(&mut self) -> &[u8] {
+        let buf = unsafe { &mut * &raw mut CONTROL_BUF };
+
+        unsafe {
+            self.usb.transfer_out(0, buf.as_mut_ptr(), 64).await;
+        }
+
+        &**buf
+    }
+    
+    pub(crate) fn stall_ep0(&mut self) {
+        self.usb.stall_ep0();
+    }
+}
+
 static NOTIFY_BUS_EVENT: TaskOnly<Interrupt> = unsafe { TaskOnly::new(Interrupt::new()) };
 
 static NOTIFY_EP_IN: TaskOnly<[Interrupt; 8]> =
@@ -413,7 +454,7 @@ fn USB() {
     let usb = unsafe { usb_regs() };
 
     let flags = usb.intflag.read();
-    if flags.eorst().bit_is_set() {
+    if flags.eorst().bit_is_set() || ep_regs(usb, 0).epintflag.read().rxstp().bit_is_set() {
         unsafe { NOTIFY_BUS_EVENT.get_unchecked().notify() };
     }
 
@@ -425,7 +466,7 @@ fn USB() {
             let regs = ep_regs(usb, ep);
             let flags = regs.epintflag.read();
 
-            if flags.trcpt0().bit() || flags.rxstp().bit() {
+            if flags.trcpt0().bit() {
                 unsafe { NOTIFY_EP_OUT.get_unchecked()[ep as usize].notify() };
             }
 

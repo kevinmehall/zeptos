@@ -22,7 +22,7 @@ use zeptos::{
 async fn main(rt: Runtime, mut hw: Hardware) {
     info!("init");
     led_task(rt).spawn(hw.syst);
-    hw.usb.run_device(ExampleDevice { rt }).await;
+    hw.usb.run_device(&mut ExampleDevice { rt }).await;
 }
 
 struct ExampleDevice {
@@ -131,7 +131,7 @@ const STRING_SERIAL: u8 = 3;
 
 static DEVICE_DESCRIPTOR: &[u8] = descriptors! {
     Device {
-        bcdUSB: 0x0201,
+        bcdUSB: 0x0200,
         bDeviceClass: ::usb::class_code::VENDOR_SPECIFIC,
         bDeviceSubClass: 0x00,
         bDeviceProtocol: 0x00,

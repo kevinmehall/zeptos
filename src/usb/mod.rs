@@ -1,26 +1,18 @@
 use core::{
-    cell::Cell,
-    future::Future,
-    marker::PhantomData,
-    ops::{Deref, DerefMut},
-    pin::{pin, Pin},
-    task::{Context, Poll},
+    cell::Cell, convert::Infallible, future::Future, marker::PhantomData, ops::{Deref, DerefMut}, pin::{pin, Pin}, task::{Context, Poll}
 };
 
-use defmt::{debug, panic, write, Format};
-use futures_util::{future::FusedFuture, select_biased, FutureExt};
-use pin_project_lite::pin_project;
+use defmt::{debug, error, info, panic, write, Format};
+use pin_project::{pin_project, pinned_drop};
 use usb::endpoint_address::{DIR_MASK as EP_DIR_MASK, IN as EP_IN, OUT as EP_OUT};
 
 pub mod descriptors;
 use descriptors::DescriptorBuilder;
 
 use crate::executor::TaskOnly;
-#[cfg(any(feature = "samd11", feature = "samd21"))]
-use crate::samd::usb::{UsbShared, CONTROL_BUF};
 
 #[cfg(any(feature = "samd11", feature = "samd21"))]
-pub use crate::samd::usb::Usb;
+pub use crate::samd::usb::{ Usb, UsbShared, Endpoint0 };
 
 #[repr(C, align(4))]
 pub struct UsbBuffer<const SIZE: usize>([u8; SIZE]);
@@ -45,8 +37,9 @@ impl<const SIZE: usize> DerefMut for UsbBuffer<SIZE> {
     }
 }
 
-pub(crate) enum Event {
+pub enum Event {
     Reset,
+    Setup([u8; 8]),
 }
 
 /// Specification defining the request.
@@ -85,13 +78,13 @@ pub enum Recipient {
 pub struct Responded {}
 
 pub struct ControlIn<'a> {
-    usb: UsbShared,
+    usb: Endpoint0,
     length: u16,
     _lt: PhantomData<&'a UsbShared>,
 }
 
 pub struct ControlOut<'a> {
-    usb: UsbShared,
+    usb: Endpoint0,
     length: u16,
     _lt: PhantomData<&'a UsbShared>,
 }
@@ -111,49 +104,32 @@ impl<'a> Format for ControlData<'a> {
 }
 
 impl<'a> ControlIn<'a> {
-    pub fn reject(self) -> Responded {
+    pub fn reject(mut self) -> Responded {
         debug!("reject in request");
         self.usb.stall_ep0();
         Responded {}
     }
 
-    pub async fn respond(self, data: &[u8]) -> Responded {
+    pub async fn respond(mut self, data: &[u8]) -> Responded {
         debug!("accepting IN request with {} bytes", data.len());
 
         // Limit response size to host's request size
         let is_full = data.len() >= self.length as usize;
-        let mut data = &data[..data.len().min(self.length as usize)];
+        let data = &data[..data.len().min(self.length as usize)];
 
-        loop {
-            // We want to be able to send an arbitrary slice, which may not be
-            // correctly aligned or in RAM (USB DMA can't read from flash), so copy
-            // a packet at a time to CONTROL_BUF
-            let buf = unsafe { &mut CONTROL_BUF.0 };
-
-            let (pkt, remaining) = data.split_at(data.len().min(buf.len()));
-
-            buf[..pkt.len()].copy_from_slice(pkt);
-            self.usb
-                .transfer_in(0x80, buf.as_ptr(), pkt.len(), false)
-                .await;
-
-            if pkt.len() < 64 || (remaining.len() == 0 && is_full) {
-                break;
-            }
-
-            data = remaining;
-        }
+        self.usb.ep0_transfer_in(data, is_full).await;
 
         debug!("data phase complete");
-        let buf = unsafe { &mut CONTROL_BUF.0 };
-        self.usb.transfer_out(0, buf.as_mut_ptr(), 64).await;
+
+        self.usb.ep0_transfer_out().await;
+
         debug!("status phase complete");
         Responded {}
     }
 }
 
 impl<'a> ControlOut<'a> {
-    pub fn reject(self) -> Responded {
+    pub fn reject(mut self) -> Responded {
         debug!("reject out request");
         self.usb.stall_ep0();
         Responded {}
@@ -163,12 +139,9 @@ impl<'a> ControlOut<'a> {
         self.length as usize
     }
 
-    pub async fn accept(&self) -> Responded {
+    pub async fn accept(mut self) -> Responded {
         debug!("accept OUT request");
-        let buf = unsafe { &mut CONTROL_BUF.0 };
-        //self.usb.transfer_out(0, PacketSize::Size64, buf.as_mut_ptr(), 64).await;
-        //debug!("data stage complete");
-        self.usb.transfer_in(0x80, buf.as_ptr(), 0, false).await;
+        self.usb.ep0_transfer_in(&[], true).await;
         debug!("status stage complete");
         Responded {}
     }
@@ -201,7 +174,7 @@ pub struct Setup<'a> {
 }
 
 impl<'a> Setup<'a> {
-    fn parse(usb: UsbShared, packet: [u8; 8]) -> Result<Setup<'a>, ()> {
+    fn parse(usb: Endpoint0, packet: [u8; 8]) -> Result<Setup<'a>, ()> {
         use usb::request_type::{
             direction, recipient, request_type, DIRECTION_MASK, RECIPIENT_MASK, REQUEST_TYPE_MASK,
         };
@@ -247,12 +220,112 @@ impl<'a> Setup<'a> {
             ControlData::Out(d) => d.reject(),
         }
     }
+
+    pub fn usb(&self) -> UsbShared {
+        match &self.data {
+            ControlData::In(c) => c.usb.usb,
+            ControlData::Out(c) => c.usb.usb,
+        }
+    }
 }
 
 #[allow(async_fn_in_trait)]
 pub trait Handler {
-    async fn handle_reset(&self) {
+    fn handle_reset(&self) {
         debug!("usb reset");
+    }
+
+    async fn handle_control_raw<'a>(&self, req: Setup<'a>) {
+        use usb::standard_request::{
+            GET_DESCRIPTOR, GET_STATUS, SET_ADDRESS, SET_CONFIGURATION, SET_INTERFACE,
+        };
+        use ControlData::*;
+        use ControlType::*;
+        use Recipient::*;
+        debug!(
+            "control request: {:?} {:?} {:02x} {:04x} {:04x} {:?}",
+            req.ty, req.recipient, req.request, req.value, req.index, &req.data
+        );
+
+        let usb = req.usb();
+
+        let Responded {} = match req {
+            Setup {
+                ty: Standard,
+                request: GET_STATUS,
+                data: In(data),
+                ..
+            } => data.respond(&[0, 0]).await,
+            Setup {
+                ty: Standard,
+                recipient: Device,
+                request: GET_DESCRIPTOR,
+                value,
+                index,
+                data: In(data),
+            } => {
+                let lang = index;
+                let kind = (value >> 8) as u8;
+                let index = (value & 0xFF) as u8;
+                let mut builder = DescriptorBuilder::new();
+                if let Some(descriptor) = self.get_descriptor(kind, index, lang, &mut builder) {
+                    debug!("returning descriptor");
+                    data.respond(descriptor).await
+                } else {
+                    debug!("descriptor not found");
+                    data.reject()
+                }
+            }
+            Setup {
+                ty: Standard,
+                recipient: Device,
+                request: SET_ADDRESS,
+                value,
+                data: Out(data),
+                ..
+            } => {
+                debug!("set address {}", value);
+                let r = data.accept().await;
+                usb.set_address(value as u8);
+                r
+            }
+            Setup {
+                ty: Standard,
+                recipient: Device,
+                request: SET_CONFIGURATION,
+                value,
+                data: Out(data),
+                ..
+            } => {
+                debug!("set configuration {}", value);
+                match self
+                    .set_configuration(value as u8, &mut Endpoints { usb })
+                    .await
+                {
+                    Ok(_) => data.accept().await,
+                    Err(_) => data.reject(),
+                }
+            }
+            Setup {
+                ty: Standard,
+                recipient: Interface,
+                request: SET_INTERFACE,
+                index,
+                value,
+                data: Out(data),
+                ..
+            } => {
+                debug!("set interface {} {}", index, value);
+                match self
+                    .set_interface(index as u8, value as u8, &mut Endpoints { usb })
+                    .await
+                {
+                    Ok(_) => data.accept().await,
+                    Err(_) => data.reject(),
+                }
+            }
+            other => self.handle_control(other).await,
+        };
     }
 
     fn get_descriptor<'a>(&self, _kind: u8, _index: u8, _lang: u16, _builder: &'a mut DescriptorBuilder) -> Option<&'a [u8]> {
@@ -278,162 +351,89 @@ pub trait Handler {
     }
 }
 
+pub trait HandlerFut: Handler {
+    type ControlRawFut<'a>: Future<Output = ()> + 'a where Self: 'a;
+
+    fn handle_control_raw_fut<'a>(&'a self, req: Setup<'a>) -> Self::ControlRawFut<'a>;
+}
+
+impl<T: Handler> HandlerFut for T {
+    type ControlRawFut<'a>: = impl Future<Output = ()> + 'a where T: 'a;
+
+    fn handle_control_raw_fut<'a>(&'a self, req: Setup<'a>) -> Self::ControlRawFut<'a> {
+        self.handle_control_raw(req)
+    }
+}
+
 impl Usb {
     /// Attach as a USB device and handle requests using the provided callback.
     ///
     /// If this future is dropped, the device will disconnect.
-    pub async fn run_device(&mut self, h: impl Handler) -> ! {
+    pub fn run_device<'a>(&'a mut self, handler: &'a mut impl Handler) -> impl Future<Output = Infallible> + 'a {
         self.enable();
         self.attach();
 
-        let device = scopeguard::guard(self, |device| {
-            device.detach();
-        });
+        #[pin_project(PinnedDrop)]
+        struct Fut<'a, H: HandlerFut + 'a> {
+            usb: &'a mut Usb,
 
-        pin_project! {
-            #[project = StatePin]
-            enum State<F1, F2> {
-                Idle,
-                Reset{ #[pin] f: F1 },
-                Control{ #[pin] f: F2 },
-            }
+            handler: &'a H,
+
+            #[pin]
+            state: Option<H::ControlRawFut<'a>>,
         }
 
-        impl<F1: Future<Output = ()>, F2: Future<Output = ()>> Future for State<F1, F2> {
-            type Output = ();
+        impl<'a, H: Handler> Future for Fut<'a, H> {
+            type Output = Infallible;
+        
+            fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+                let mut this = self.project();
+                match this.usb.poll_event(cx) {
+                    Poll::Ready(Event::Reset) => {
+                        this.state.set(None);
+                        this.usb.configure_ep0();
+                        this.handler.handle_reset();
+                    }
 
-            fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-                let done = match self.as_mut().project() {
-                    StatePin::Idle => Poll::Pending,
-                    StatePin::Reset { f } => f.poll(cx),
-                    StatePin::Control { f } => f.poll(cx),
+                    Poll::Ready(Event::Setup(setup)) => {
+                        this.state.set(None);
+                        if let Ok(setup) = Setup::parse(unsafe { this.usb.ep0() }, setup) {
+                            this.state.set(Some(this.handler.handle_control_raw_fut(setup)));
+                        } else {
+                            error!("invalid setup packet: {:x}", setup);
+                            this.usb.stall_ep0();
+                        }
+                    }
+
+                    Poll::Pending => {}
                 }
-                .is_ready();
+
+                let done = match this.state.as_mut().as_pin_mut() {
+                    Some(fut) => fut.poll(cx),
+                    None => Poll::Pending,
+                }.is_ready();
 
                 if done {
-                    self.set(State::Idle);
+                    this.state.set(None);
                 }
 
                 Poll::Pending
             }
         }
 
-        impl<F1: Future<Output = ()>, F2: Future<Output = ()>> FusedFuture for State<F1, F2> {
-            fn is_terminated(&self) -> bool {
-                false
+        #[pinned_drop]
+        impl<'a, H: Handler> PinnedDrop for Fut<'a, H> {
+            fn drop(self: Pin<&mut Self>) {
+                let this = self.project();
+                this.usb.detach();
             }
         }
 
-        let mut inner = pin!(State::Idle);
-
-        loop {
-            select_biased! {
-                _ = device.bus_event().fuse() => {
-                    device.configure_ep0();
-                    inner.set(State::Reset { f: h.handle_reset() });
-                }
-                setup = device.receive_setup().fuse() => {
-                    if let Ok(setup) = Setup::parse(device.shared(), setup) {
-                        inner.set(State::Control { f: device.handle_control(setup, &h) });
-                    } else {
-                        inner.set(State::Idle);
-                        device.stall_ep0();
-                    }
-                },
-                _ = inner => {}
-            }
+        Fut {
+            usb: self,
+            state: None,
+            handler,
         }
-    }
-
-    async fn handle_control<'a>(&self, req: Setup<'a>, h: &impl Handler) {
-        use usb::standard_request::{
-            GET_DESCRIPTOR, GET_STATUS, SET_ADDRESS, SET_CONFIGURATION, SET_INTERFACE,
-        };
-        use ControlData::*;
-        use ControlType::*;
-        use Recipient::*;
-        debug!(
-            "control request: {:?} {:?} {:02x} {:04x} {:04x} {:?}",
-            req.ty, req.recipient, req.request, req.value, req.index, &req.data
-        );
-
-        let Responded {} = match req {
-            Setup {
-                ty: Standard,
-                request: GET_STATUS,
-                data: In(data),
-                ..
-            } => data.respond(&[0, 0]).await,
-            Setup {
-                ty: Standard,
-                recipient: Device,
-                request: GET_DESCRIPTOR,
-                value,
-                index,
-                data: In(data),
-            } => {
-                let lang = index;
-                let kind = (value >> 8) as u8;
-                let index = (value & 0xFF) as u8;
-                let mut builder = DescriptorBuilder::new();
-                if let Some(descriptor) = h.get_descriptor(kind, index, lang, &mut builder) {
-                    debug!("returning descriptor");
-                    data.respond(descriptor).await
-                } else {
-                    debug!("descriptor not found");
-                    data.reject()
-                }
-            }
-            Setup {
-                ty: Standard,
-                recipient: Device,
-                request: SET_ADDRESS,
-                value,
-                data: Out(data),
-                ..
-            } => {
-                debug!("set address {}", value);
-                let r = data.accept().await;
-                self.set_address(value as u8);
-                r
-            }
-            Setup {
-                ty: Standard,
-                recipient: Device,
-                request: SET_CONFIGURATION,
-                value,
-                data: Out(data),
-                ..
-            } => {
-                debug!("set configuration {}", value);
-                match h
-                    .set_configuration(value as u8, &mut Endpoints { usb: **self })
-                    .await
-                {
-                    Ok(_) => data.accept().await,
-                    Err(_) => data.reject(),
-                }
-            }
-            Setup {
-                ty: Standard,
-                recipient: Interface,
-                request: SET_INTERFACE,
-                index,
-                value,
-                data: Out(data),
-                ..
-            } => {
-                debug!("set interface {} {}", index, value);
-                match h
-                    .set_interface(index as u8, value as u8, &mut Endpoints { usb: **self })
-                    .await
-                {
-                    Ok(_) => data.accept().await,
-                    Err(_) => data.reject(),
-                }
-            }
-            other => h.handle_control(other).await,
-        };
     }
 }
 
@@ -493,16 +493,16 @@ pub struct Endpoint<D, const EP: u8> {
 }
 
 impl<const EP: u8> Endpoint<Out, EP> {
-    pub async fn receive<const SIZE: usize>(&mut self, buf: &mut UsbBuffer<SIZE>) -> usize {
+    pub fn receive<const SIZE: usize>(&mut self, buf: &mut UsbBuffer<SIZE>) -> impl Future<Output = usize> + '_ {
         assert!(SIZE >= 64);
-        self.usb.transfer_out(EP, buf.as_mut_ptr(), buf.len()).await
+        unsafe { self.usb.transfer_out(EP, buf.as_mut_ptr(), buf.len()) }
     }
 }
 
 impl<const EP: u8> Endpoint<In, EP> {
-    pub async fn send<const SIZE: usize>(&mut self, buf: &UsbBuffer<SIZE>, len: usize, zlp: bool) {
+    pub fn send<const SIZE: usize>(&mut self, buf: &UsbBuffer<SIZE>, len: usize, zlp: bool) -> impl Future<Output = ()> + '_ {
         assert!(len <= SIZE);
-        self.usb.transfer_in(EP, buf.as_ptr(), len, zlp).await
+        unsafe { self.usb.transfer_in(EP, buf.as_ptr(), len, zlp) }
     }
 }
 
