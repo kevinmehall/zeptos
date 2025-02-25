@@ -171,7 +171,7 @@ fn configure_pll(p: pac::pll::Pll, config: PllConfig) {
 }
 
 #[cfg(feature = "rp2040-boot2-w25q080")]
-#[link_section = ".boot2"]
+#[unsafe(link_section = ".boot2")]
 #[used]
 static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 

@@ -52,7 +52,7 @@ fn rom_table_lookup<T>(table: *const u16, tag: RomFnTableCode) -> T {
 ///
 /// This functions grabs a 16-bit value from ROM and expands it out to a full 32-bit pointer.
 unsafe fn rom_hword_as_ptr(rom_address: *const u16) -> *const u32 {
-    let ptr: u16 = *rom_address;
+    let ptr: u16 = unsafe { *rom_address };
     ptr as *const u32
 }
 
@@ -166,7 +166,9 @@ macro_rules! declare_rom_function {
         /// Rust. If in doubt, check the RP2040 datasheet for details and do your own
         /// safety evaluation.
         pub unsafe extern "C" fn $name( $($argname: $ty),* ) -> $ret {
-            $name::ptr()($($argname),*)
+            unsafe {
+                $name::ptr()($($argname),*)
+            }
         }
     };
 }
@@ -395,12 +397,14 @@ unsafe extern "aapcs" fn __aeabi_memcpy8(dest: *mut u8, src: *const u8, n: usize
 */
 
 unsafe fn convert_str(s: *const u8) -> &'static str {
-    let mut end = s;
-    while *end != 0 {
-        end = end.add(1);
+    unsafe {
+        let mut end = s;
+        while *end != 0 {
+            end = end.add(1);
+        }
+        let s = core::slice::from_raw_parts(s, end.offset_from(s) as usize);
+        core::str::from_utf8_unchecked(s)
     }
-    let s = core::slice::from_raw_parts(s, end.offset_from(s) as usize);
-    core::str::from_utf8_unchecked(s)
 }
 
 /// The version number of the rom.

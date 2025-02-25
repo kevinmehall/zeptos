@@ -37,7 +37,7 @@ pub fn set_gclk_divider_and_source(
 pub fn enable_clock(gclk: &mut GCLK, clock: IDSELECT_A, generator: GENSELECT_A) {
     gclk.clkctrl.write(|w| unsafe {
         w.id().bits(u8::from(clock));
-        w.gen().bits(u8::from(generator));
+        w.r#gen().bits(u8::from(generator));
         w.clken().set_bit()
     });
     wait_for_sync(gclk);

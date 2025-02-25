@@ -1,9 +1,12 @@
 [package]
 name = "zeptos"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+test = false
+doctest = false
+bench = false
 
 [dependencies]
 cortex-m = "0.7.7"
@@ -18,7 +21,7 @@ rp2040-boot2 = { version = "0.3", optional = true }
 
 defmt = "0.3.8"
 pin-project = "1.1.6"
-scopeguard = { version = "1.2.0", default_features = false }
+scopeguard = { version = "1.2.0", default-features = false }
 
 [dependencies.usb]
 git = "https://github.com/kevinmehall/rust-usb.git"

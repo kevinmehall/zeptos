@@ -37,7 +37,7 @@ pub mod internal {
     use crate::{ cortex_m::SysTick, Hardware, Runtime };
 
     #[inline(always)]
-    pub unsafe fn pre_init(rt: Runtime) -> Hardware {
+    pub unsafe fn pre_init(rt: Runtime) -> Hardware { unsafe {
         cortex_m::interrupt::disable();
 
         #[cfg(any(feature = "samd11", feature = "samd21"))]
@@ -52,7 +52,7 @@ pub mod internal {
             #[cfg(all(feature = "usb"))]
             usb: crate::usb::Usb::new(rt),
         }
-    }
+    }}
 
     #[inline(always)]
     pub unsafe fn post_init() -> ! {
