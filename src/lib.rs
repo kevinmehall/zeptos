@@ -27,6 +27,9 @@ pub mod usb;
 ))]
 pub const CLOCK_HZ: u32 = 48_000_000;
 
+#[cfg(feature="rp2040")]
+pub const CLOCK_HZ: u32 = 125_000_000;
+
 #[doc(hidden)]
 pub mod internal {
     pub use cortex_m_rt;

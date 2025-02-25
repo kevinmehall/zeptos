@@ -43,7 +43,7 @@ impl zeptos::usb::Handler for ExampleDevice {
             (STRING, 0) => Some(LANGUAGE_LIST_US_ENGLISH),
             (STRING, STRING_MFG) => Some(builder.string_ascii("zeptos project")),
             (STRING, STRING_PRODUCT) => Some(builder.string_ascii("rp2040 test device")),
-            (STRING, STRING_SERIAL) => Some(builder.string_hex(&[0, 0, 0, 0])),
+            (STRING, STRING_SERIAL) => Some(builder.string_hex(&zeptos::rp::serial_number())),
             _ => None,
         }
     }

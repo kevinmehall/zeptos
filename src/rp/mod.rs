@@ -1,3 +1,4 @@
+use defmt::info;
 use rp_pac::{clocks::vals::{ClkAdcCtrlAuxsrc, ClkPeriCtrlAuxsrc, ClkRefCtrlSrc, ClkSysCtrlAuxsrc, ClkSysCtrlSrc, ClkUsbCtrlAuxsrc}, pll, resets::regs::Peripherals};
 pub use rp_pac as pac;
 
@@ -6,14 +7,11 @@ pub use rp_reg::RpReg;
 
 pub mod gpio;
 
-//pub mod clock;
-//pub mod calibration;
+pub mod rom_data;
+mod flash;
 
 #[cfg(feature="usb")]
 pub mod usb;
-
-//mod serial_number;
-//pub use serial_number::serial_number;
 
 const XOSC_HZ: u32 = 12_000_000;
 const XOSC_STARTUP_DELAY_MS: u32 = 1;
@@ -25,9 +23,13 @@ pub const CLK_REF_HZ: u32 = XOSC_HZ;
 pub const CLK_SYS_HZ: u32 = PLL_SYS_HZ;
 pub const CLK_PERI_HZ: u32 = PLL_USB_HZ;
 
+static mut FLASH_UID: [u8; 8] = [0; 8];
+
 pub(crate) fn init() {
     #![allow(unused_variables, unused_mut)]
-
+    
+    info!("init");
+    
     // Set clock to ROSC in case we're running from PLL before resetting it
     pac::CLOCKS.clk_sys_resus_ctrl().write_value(pac::clocks::regs::ClkSysResusCtrl(0));
     pac::CLOCKS.clk_sys_ctrl().modify(|w| w.set_src(ClkSysCtrlSrc::CLK_REF));
@@ -97,12 +99,25 @@ pub(crate) fn init() {
     enable.set_io_qspi(true);
     enable.set_pads_bank0(true);
     enable.set_pads_qspi(true);
+    enable.set_syscfg(true);
+    enable.set_sysinfo(true);
+    enable.set_busctrl(true);
 
     #[cfg(feature = "usb")]
     enable.set_usbctrl(true);
 
     pac::RESETS.reset().write_value_clear(enable);
     while ((!pac::RESETS.reset_done().read().0) & enable.0) != 0 {}
+
+    info!("flash config start");
+    unsafe {
+        cortex_m::interrupt::disable();
+        // SAFETY: interrupts have not been enabled and core 1 is halted
+        flash::flash_unique_id(&mut * &raw mut FLASH_UID, true);
+        cortex_m::interrupt::enable();
+    }
+    info!("flash config done: {:?}", cortex_m::register::primask::read().is_active());
+
 }
 
 struct PllConfig {
@@ -159,3 +174,7 @@ fn configure_pll(p: pac::pll::Pll, config: PllConfig) {
 #[link_section = ".boot2"]
 #[used]
 static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
+
+pub fn serial_number() -> [u8; 8] {
+    unsafe { * &raw const FLASH_UID }
+}

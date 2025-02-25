@@ -34,7 +34,7 @@ samd-clock-48m-internal = ["clock"]
 samd-clock-48m-external-32k-xtal = ["clock"]
 samd-clock-48m-external-32k-osc = ["clock"]
 
-rp2040 = ["dep:rp-pac"]
+rp2040 = ["dep:rp-pac",  "clock"]
 rp2040-boot2-w25q080 = ["rp2040-boot2"]
 
 usb = []

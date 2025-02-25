@@ -1,8 +1,7 @@
-use core::future::Future;
-use core::{mem, pin::pin};
+use core::mem;
 use core::ops::Deref;
 use core::sync::atomic::{compiler_fence, AtomicPtr, AtomicU16, AtomicU32, AtomicU8, Ordering};
-use core::task::{ready, Context, Poll};
+use core::task::{Context, Poll};
 
 use crate::executor::{Interrupt, TaskOnly};
 use crate::samd::calibration;
