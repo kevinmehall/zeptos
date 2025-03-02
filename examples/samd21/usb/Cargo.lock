@@ -346,7 +346,8 @@ checksum = "3354b9ac3fae1ff6755cb6db53683adb661634f67557942dea4facebec0fee4b"
 [[package]]
 name = "usb"
 version = "0.3.0"
-source = "git+https://github.com/kevinmehall/rust-usb.git?rev=cb0599102313de79d34d4be4bb37f2c25e480ba6#cb0599102313de79d34d4be4bb37f2c25e480ba6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1351842cf47c13bf2169636357eea4ebf831dc29485fbe64963583b8e74b59a9"
 
 [[package]]
 name = "vcell"
