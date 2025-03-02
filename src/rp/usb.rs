@@ -12,7 +12,7 @@ use rp_pac::common::{Reg, RW};
 use rp_pac::usb::regs::{EpAbort, EpAbortDone};
 use rp_pac::usb_dpram::regs::{EpBufferControl, EpControl};
 use rp_pac::usb_dpram::vals::EpControlEndpointType;
-use rp_pac::{interrupt, USBCTRL_DPRAM, USBCTRL_REGS};
+use rp_pac::{interrupt, USB_DPRAM, USB};
 use scopeguard::ScopeGuard;
 use usb::endpoint_address::{DIR_MASK as EP_DIR_MASK, IN as EP_IN, OUT as EP_OUT, ADDR_MASK as EP_ADDR_MASK};
 
@@ -20,7 +20,7 @@ use super::{pac as pac, RpReg};
 
 const EP_COUNT: usize = 16;
 const EP_MEMORY_SIZE: usize = 4096;
-const EP_MEMORY: *mut u8 = pac::USBCTRL_DPRAM.as_ptr() as *mut u8;
+const EP_MEMORY: *mut u8 = pac::USB_DPRAM.as_ptr() as *mut u8;
 
 #[derive(Copy, Clone)]
 pub struct UsbShared {
@@ -118,8 +118,8 @@ impl Usb {
             self.usb().buff_status().write(|w| w.0 = 0xFFFFFFFF);
             self.usb().addr_endp().write(|w| w.set_address(0));
             for i in 1..EP_COUNT {
-                USBCTRL_DPRAM.ep_in_control(i - 1).write(|w| { w.set_enable(false) });
-                USBCTRL_DPRAM.ep_out_control(i - 1).write(|w| { w.set_enable(false) });
+                USB_DPRAM.ep_in_control(i - 1).write(|w| { w.set_enable(false) });
+                USB_DPRAM.ep_out_control(i - 1).write(|w| { w.set_enable(false) });
             }
             self.usb().sie_status().write(|w| w.set_bus_reset(true));
             Poll::Ready(Event::Reset)
@@ -131,8 +131,8 @@ impl Usb {
 
             compiler_fence(Ordering::Release);
             
-            USBCTRL_DPRAM.ep_in_buffer_control(0).write(|w| w.set_pid(0, false));
-            USBCTRL_DPRAM.ep_out_buffer_control(0).write(|w| w.set_pid(0, false));
+            USB_DPRAM.ep_in_buffer_control(0).write(|w| w.set_pid(0, false));
+            USB_DPRAM.ep_out_buffer_control(0).write(|w| w.set_pid(0, false));
             self.usb().ep_stall_arm().write(|w| {
                 w.set_ep0_in(false);
                 w.set_ep0_out(false);
@@ -152,7 +152,7 @@ impl Usb {
 
 impl UsbShared {
     fn usb(&self) -> pac::usb::Usb {
-        pac::USBCTRL_REGS
+        pac::USB
     }
 
     pub fn rt(&self) -> Runtime {
@@ -165,10 +165,10 @@ impl UsbShared {
     }
 
     pub fn stall_ep0(&self) {
-        USBCTRL_DPRAM.ep_in_buffer_control(0).write(|w| {
+        USB_DPRAM.ep_in_buffer_control(0).write(|w| {
             w.set_stall(true);
         });
-        USBCTRL_DPRAM.ep_out_buffer_control(0).write(|w| {
+        USB_DPRAM.ep_out_buffer_control(0).write(|w| {
             w.set_stall(true);
         });
         self.usb().ep_stall_arm().write(|w| {
@@ -187,17 +187,17 @@ impl UsbShared {
     fn ep_ctrl(&self, ep: u8) -> Reg<EpControl, RW> {
         assert!(ep & EP_ADDR_MASK != 0);
         if ep & EP_DIR_MASK == EP_IN {
-            USBCTRL_DPRAM.ep_in_control((ep & EP_ADDR_MASK) as usize - 1)
+            USB_DPRAM.ep_in_control((ep & EP_ADDR_MASK) as usize - 1)
         } else {
-            USBCTRL_DPRAM.ep_out_control((ep & EP_ADDR_MASK) as usize - 1)
+            USB_DPRAM.ep_out_control((ep & EP_ADDR_MASK) as usize - 1)
         }
     }
 
     fn ep_buffer_control(&self, ep: u8) -> Reg<EpBufferControl, RW> {
         if ep & EP_DIR_MASK == EP_IN {
-            USBCTRL_DPRAM.ep_in_buffer_control((ep & EP_ADDR_MASK) as usize)
+            USB_DPRAM.ep_in_buffer_control((ep & EP_ADDR_MASK) as usize)
         } else {
-            USBCTRL_DPRAM.ep_out_buffer_control((ep & EP_ADDR_MASK) as usize)
+            USB_DPRAM.ep_out_buffer_control((ep & EP_ADDR_MASK) as usize)
         }
     }
 
@@ -436,10 +436,10 @@ static NOTIFY_EP_OUT: TaskOnly<[Interrupt; 8]> =
 
 #[interrupt]
 fn USBCTRL_IRQ() {
-    let flags = USBCTRL_REGS.ints().read();
+    let flags = USB.ints().read();
 
-    let buf_status = USBCTRL_REGS.buff_status().read();
-    USBCTRL_REGS.buff_status().write_value(buf_status);
+    let buf_status = USB.buff_status().read();
+    USB.buff_status().write_value(buf_status);
 
     defmt::info!("usb irq: flags {:08x} buf_status {:08x}", flags.0, buf_status.0);
 

@@ -7,10 +7,7 @@ use panic_probe as _;
 
 use defmt::info;
 
-use zeptos::rp::{
-    gpio::{self, TypePin, Function},
-    //serial_number,
-};
+use zeptos::rp::gpio::{self, TypePin, Function};
 use zeptos::{
     cortex_m::SysTick,
     usb::descriptors::{DescriptorBuilder, LANGUAGE_LIST_US_ENGLISH},

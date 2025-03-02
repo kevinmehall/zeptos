@@ -1,4 +1,3 @@
-use defmt::info;
 use rp_pac::{clocks::vals::{ClkAdcCtrlAuxsrc, ClkPeriCtrlAuxsrc, ClkRefCtrlSrc, ClkSysCtrlAuxsrc, ClkSysCtrlSrc, ClkUsbCtrlAuxsrc}, pll, resets::regs::Peripherals};
 pub use rp_pac as pac;
 
@@ -8,7 +7,7 @@ pub use rp_reg::RpReg;
 pub mod gpio;
 
 pub mod rom_data;
-mod flash;
+pub mod flash;
 
 #[cfg(feature="usb")]
 pub mod usb;
@@ -27,8 +26,6 @@ static mut FLASH_UID: [u8; 8] = [0; 8];
 
 pub(crate) fn init() {
     #![allow(unused_variables, unused_mut)]
-    
-    info!("init");
     
     // Set clock to ROSC in case we're running from PLL before resetting it
     pac::CLOCKS.clk_sys_resus_ctrl().write_value(pac::clocks::regs::ClkSysResusCtrl(0));
@@ -109,15 +106,12 @@ pub(crate) fn init() {
     pac::RESETS.reset().write_value_clear(enable);
     while ((!pac::RESETS.reset_done().read().0) & enable.0) != 0 {}
 
-    info!("flash config start");
     unsafe {
         cortex_m::interrupt::disable();
         // SAFETY: interrupts have not been enabled and core 1 is halted
         flash::flash_unique_id(&mut * &raw mut FLASH_UID, true);
         cortex_m::interrupt::enable();
     }
-    info!("flash config done: {:?}", cortex_m::register::primask::read().is_active());
-
 }
 
 struct PllConfig {
