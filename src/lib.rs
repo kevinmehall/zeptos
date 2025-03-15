@@ -71,6 +71,8 @@ cfg_select!{
 pub mod internal {
     pub use cortex_m_rt;
 
+    #[cfg(all(any(feature = "rp2040", feature = "rp2350"), feature = "i2c0"))]
+use crate::rp;
     pub use crate::{ Hardware, Runtime, executor::{ RunQueue, RunQueueNode, Task, TaskStorage } };
 
     #[inline(always)]
@@ -95,6 +97,12 @@ pub mod internal {
         Hardware {
             #[cfg(all(feature = "usb"))]
             usb: unsafe { crate::usb::Usb::new(rt) },
+
+            #[cfg(all(any(feature = "rp2040", feature = "rp2350"), feature = "i2c0"))]
+            i2c0: unsafe { <rp::i2c::I2c0 as rp::i2c::StaticInstance>::steal() },
+
+            #[cfg(all(any(feature = "rp2040", feature = "rp2350"), feature = "i2c1"))]
+            i2c1: unsafe { <rp::i2c::I2c1 as rp::i2c::StaticInstance>::steal() },
         }
     }
 
@@ -136,4 +144,10 @@ impl Runtime {
 pub struct Hardware {
     #[cfg(feature = "usb")]
     pub usb: usb::Usb,
+
+    #[cfg(all(any(feature = "rp2040", feature = "rp2350"), feature = "i2c0"))]
+    pub i2c0: rp::i2c::I2c0,
+
+    #[cfg(all(any(feature = "rp2040", feature = "rp2350"), feature = "i2c1"))]
+    pub i2c1: rp::i2c::I2c1,
 }

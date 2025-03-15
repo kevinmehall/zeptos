@@ -1,8 +1,5 @@
-#[cfg(feature = "gpio-interrupts")]
-use rp_pac::Interrupt;
-use rp_pac::{clocks::vals::{ClkAdcCtrlAuxsrc, ClkPeriCtrlAuxsrc, ClkRefCtrlSrc, ClkSysCtrlAuxsrc, ClkSysCtrlSrc}, pll, resets::regs::Peripherals};
 #[allow(unused_imports)]
-use rp_pac::clocks::vals::ClkUsbCtrlAuxsrc;
+use rp_pac::{clocks::vals::{ClkAdcCtrlAuxsrc, ClkPeriCtrlAuxsrc, ClkRefCtrlSrc, ClkSysCtrlAuxsrc, ClkSysCtrlSrc, ClkUsbCtrlAuxsrc}, pll, resets::regs::Peripherals, Interrupt};
 pub use rp_pac as pac;
 
 mod rp_reg;
@@ -18,6 +15,8 @@ pub mod flash;
 
 #[cfg(feature="usb")]
 pub mod usb;
+
+pub mod i2c;
 
 #[cfg(all(feature = "rp2040", feature = "rp2040-boot2-w25q080"))]
 #[unsafe(link_section = ".boot2")]
@@ -144,9 +143,7 @@ pub(crate) fn init() {
     enable.set_syscfg(true);
     enable.set_sysinfo(true);
     enable.set_busctrl(true);
-
-    #[cfg(feature = "usb")]
-    enable.set_usbctrl(true);
+    #[cfg(feature = "usb")] enable.set_usbctrl(true);
 
     pac::RESETS.reset().write_value_clear(enable);
     while ((!pac::RESETS.reset_done().read().0) & enable.0) != 0 {}
@@ -161,6 +158,11 @@ pub(crate) fn init() {
     unsafe {
         #[cfg(feature = "gpio-interrupts")]
         cortex_m::peripheral::NVIC::unmask(Interrupt::IO_IRQ_BANK0);
+        #[cfg(feature = "i2c0")]
+        cortex_m::peripheral::NVIC::unmask(Interrupt::I2C0_IRQ);
+        #[cfg(feature = "i2c1")]
+        cortex_m::peripheral::NVIC::unmask(Interrupt::I2C1_IRQ);
+
     }
 }
 

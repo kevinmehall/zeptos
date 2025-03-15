@@ -4,9 +4,7 @@ use core::{mem, slice};
 use core::ops::Deref;
 use core::sync::atomic::{compiler_fence, Ordering};
 
-use crate::executor::{Interrupt, TaskOnly};
-use crate::usb::Event;
-use crate::Runtime;
+use crate::{executor::Interrupt, usb::Event, Runtime, TaskOnly};
 use defmt::{assert, debug, debug_assert};
 use rp_pac::common::{Reg, RW};
 use rp_pac::usb::regs::{EpAbort, EpAbortDone};

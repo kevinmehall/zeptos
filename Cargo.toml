@@ -39,6 +39,8 @@ rp2040 = ["dep:rp-pac", "rp-pac/rp2040"]
 rp2040-boot2-w25q080 = ["rp2040-boot2"]
 rp2350 = ["dep:rp-pac", "rp-pac/rp235x"]
 rom-func-cache = []
+i2c0 = []
+i2c1 = []
 
 usb = []
 time = []

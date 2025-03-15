@@ -9,7 +9,7 @@ use usb::endpoint_address::{DIR_MASK as EP_DIR_MASK, IN as EP_IN, OUT as EP_OUT}
 pub mod descriptors;
 use descriptors::DescriptorBuilder;
 
-use crate::executor::TaskOnly;
+use crate::TaskOnly;
 
 cfg_select!{
     any(feature = "samd11", feature = "samd21") => {
