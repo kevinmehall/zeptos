@@ -32,21 +32,14 @@ macro_rules! descriptors {
             assert!(desc.len() == Desc::LEN);
 
             let mut bytes = [0u8; LEN];
-            let mut pos = 0;
-
-            while pos < desc.len() {
-                bytes[pos] = desc[pos];
-                pos += 1;
-            }
+            
+            let (mut first, mut rest) = bytes.split_at_mut(desc.len());
+            first.copy_from_slice(&desc);
 
             let mut child = 0;
             while child < CHILDREN.len() {
-                let mut cpos = 0;
-                while cpos < CHILDREN[child].len() {
-                    bytes[pos] = CHILDREN[child][cpos];
-                    cpos += 1;
-                    pos += 1;
-                }
+                (first, rest) = rest.split_at_mut(CHILDREN[child].len());
+                first.copy_from_slice(&CHILDREN[child]);
                 child += 1;
             }
 
@@ -403,45 +396,19 @@ impl MicrosoftOsCompatibleID {
     pub const DESCRIPTOR_TYPE: u8 = MS_OS_20_FEATURE_COMPATBLE_ID;
 
     pub const fn bytes(self, _children: &[&[u8]]) -> [u8; Self::LEN] {
-        #[rustfmt::ignore]
-        let mut bytes = [
-            Self::LEN as u8,
-            0,
-            Self::DESCRIPTOR_TYPE,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-        ];
+        let mut bytes = [0; Self::LEN];
+        bytes[0] = Self::LEN as u8;
+        bytes[2] = Self::DESCRIPTOR_TYPE;
 
         let src = self.compatible_id.as_bytes();
         assert!(src.len() < 8);
-        let mut i = 0;
-        while i < src.len() {
-            bytes[i + 4] = src[i];
-            i += 1;
-        }
+        let dst = bytes.split_at_mut(4).1.split_at_mut(src.len()).0;
+        dst.copy_from_slice(src);
 
         let src = self.sub_compatible_id.as_bytes();
         assert!(src.len() < 8);
-        let mut i = 0;
-        while i < src.len() {
-            bytes[i + 12] = src[i];
-            i += 1;
-        }
+        let dst = bytes.split_at_mut(12).1.split_at_mut(src.len()).0;
+        dst.copy_from_slice(src);
 
         bytes
     }
