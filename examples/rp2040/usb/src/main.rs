@@ -5,7 +5,11 @@
 use defmt_rtt as _;
 use panic_probe as _;
 
+use core::pin::pin;
+use core::cell::{ Cell, RefCell };
+
 use defmt::info;
+use futures_util::future;
 
 use zeptos::rp::gpio::{self, TypePin, Function};
 use zeptos::{
@@ -17,13 +21,19 @@ use zeptos::{
 #[zeptos::main]
 async fn main(rt: Runtime, mut hw: Hardware) {
     info!("init");
-    led_task(rt).spawn(rt);
-    hw.usb.run_device(&mut ExampleDevice { rt }).await;
+    hw.usb.run_device(&mut ExampleDevice { rt, count: Cell::new(0), echo_payload: RefCell::new([0; 16]) }).await;
 }
+
+const REQ_COUNT: u8 = 0x01;
+const REQ_SLOW: u8 = 0x02;
+const REQ_ECHO: u8 = 0x03;
 
 struct ExampleDevice {
     rt: Runtime,
+    count: Cell<u32>,
+    echo_payload: RefCell<[u8; 16]>,
 }
+
 impl zeptos::usb::Handler for ExampleDevice {
     fn get_descriptor<'a>(
         &self,
@@ -69,8 +79,33 @@ impl zeptos::usb::Handler for ExampleDevice {
     }
 
     async fn handle_control<'a>(&self, req: Setup<'a>) -> Responded {
+        use zeptos::usb::ControlData::*;
+        use zeptos::usb::ControlType::*;
+        use zeptos::usb::Recipient::*;
+
         match req {
-            unknown => unknown.reject(),
+            Setup { ty: Vendor, recipient: Device, request: REQ_COUNT, value: _, index: _, data: In(data) } => {
+                self.count.set(self.count.get() + 1);
+                data.respond(&self.count.get().to_le_bytes()).await
+            }
+            Setup { ty: Vendor, recipient: Device, request: REQ_ECHO, value, index, data: Out(data) } => {
+                let mut echo = self.echo_payload.borrow_mut();
+                echo[0..2].copy_from_slice(&value.to_le_bytes());
+                echo[2..4].copy_from_slice(&index.to_le_bytes());
+                data.accept().await
+            }
+            Setup { ty: Vendor, recipient: Device, request: REQ_ECHO, value: _, index: _, data: In(data) } => {
+                let echo = self.echo_payload.borrow();
+                data.respond(&echo[..]).await
+            }
+            Setup { ty: Vendor, recipient: Device, request: REQ_SLOW, value, index: _, data } => {
+                self.rt.delay_us(value as u32 * 8).await;
+                match data {
+                    In(data) => data.respond(&[]).await,
+                    Out(data) => data.accept().await,
+                }
+            }
+            req => req.reject(),
         }
     }
 }
@@ -82,16 +117,21 @@ impl ExampleDevice {
         let ep_out = endpoints.bulk_out::<EP_OUT>();
         let ep_in = endpoints.bulk_in::<EP_IN>();
         bulk_task(self.rt).spawn(ep_out, ep_in);
+
+        let ep_int_in = endpoints.interrupt_in::<EP_INT_IN>();
+        periodic_task(self.rt).spawn(self.rt, ep_int_in);
     }
 
     fn unconfigure(&self) {
         info!("Unconfigure");
         bulk_task(self.rt).cancel();
+        periodic_task(self.rt).cancel();
     }
 }
 
 const EP_OUT: u8 = 0x01;
 const EP_IN: u8 = 0x81;
+const EP_INT_IN: u8 = 0x82;
 
 #[zeptos::task]
 async fn bulk_task(mut ep_out: Endpoint<Out, EP_OUT>, mut ep_in: Endpoint<In, EP_IN>) {
@@ -103,16 +143,32 @@ async fn bulk_task(mut ep_out: Endpoint<Out, EP_OUT>, mut ep_in: Endpoint<In, EP
 }
 
 #[zeptos::task]
-async fn led_task(rt: Runtime) {
+async fn periodic_task(rt: Runtime, mut ep_int_in: Endpoint<In, EP_INT_IN>) {
+    let mut count: u32 = 0;
+    let mut buf = UsbBuffer::<64>::new();
     gpio::GPIO25::set_function(Function::F5);
     gpio::GPIO25::oe_set();
 
     loop {
-        rt.delay_us(100_000).await;
-        gpio::GPIO25::out_set();
-        rt.delay_us(100_000).await;
-        gpio::GPIO25::out_clr();
+        buf[0..4].copy_from_slice(&count.to_le_bytes());
+        buf[4..8].copy_from_slice(&rt.now().0.to_le_bytes());
+        
+        let time = pin!(async {
+            rt.delay_us(150_000).await;
+            gpio::GPIO25::out_set();
+            rt.delay_us(100_000).await;
+            gpio::GPIO25::out_clr();
+        });
+
+        let send = pin!(async {
+            ep_int_in.send(&buf, 8, false).await;
+            future::pending::<()>().await;
+        });
+
+        future::select(time, send).await;
+        
         defmt::info!("blink");
+        count += 1;
     }
 }
 
@@ -135,7 +191,7 @@ static DEVICE_DESCRIPTOR: &[u8] = descriptors! {
         bDeviceProtocol: 0x00,
         bMaxPacketSize0: 64,
         idVendor: 0x59e3,
-        idProduct: 0x2222,
+        idProduct: 0x00AA,
         bcdDevice: 0x0000,
         iManufacturer: STRING_MFG,
         iProduct: STRING_PRODUCT,
@@ -171,6 +227,13 @@ static CONFIG_DESCRIPTOR: &[u8] = descriptors! {
                 bmAttributes: usb::endpoint_attributes::transfer_type::BULK,
                 wMaxPacketSize: 64,
                 bInterval: 0,
+            }
+
+            +EndpointDescriptor {
+                bEndpointAddress: EP_INT_IN,
+                bmAttributes: usb::endpoint_attributes::transfer_type::INTERRUPT,
+                wMaxPacketSize: 64,
+                bInterval: 10,
             }
         }
     }

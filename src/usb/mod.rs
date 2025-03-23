@@ -462,9 +462,9 @@ impl Endpoints {
         enabled.set(enabled.get() | mask);
     }
 
-    pub fn bulk_in<const EP: u8>(&self) -> Endpoint<In, EP> {
+    fn bulk_interrupt<D: EpDir, const EP: u8>(&self) -> Endpoint<D, EP> {
         const {
-            assert!(EP & EP_DIR_MASK == EP_IN);
+            assert!(EP & EP_DIR_MASK == D::DIR);
         }
         self.mark_enabled(EP);
         self.usb.enable_ep(EP);
@@ -472,23 +472,38 @@ impl Endpoints {
             usb: self.usb,
             _d: PhantomData,
         }
+    }
+
+    pub fn bulk_in<const EP: u8>(&self) -> Endpoint<In, EP> {
+        self.bulk_interrupt()
     }
 
     pub fn bulk_out<const EP: u8>(&self) -> Endpoint<Out, EP> {
-        const {
-            assert!(EP & EP_DIR_MASK == EP_OUT);
-        }
-        self.mark_enabled(EP);
-        self.usb.enable_ep(EP);
-        Endpoint {
-            usb: self.usb,
-            _d: PhantomData,
-        }
+        self.bulk_interrupt()
+    }
+
+    pub fn interrupt_in<const EP: u8>(&self) -> Endpoint<In, EP> {
+        self.bulk_interrupt()
+    }
+
+    pub fn interrupt_out<const EP: u8>(&self) -> Endpoint<Out, EP> {
+        self.bulk_interrupt()
     }
 }
 
+
+pub trait EpDir {
+    const DIR: u8;
+}
 pub struct In;
 pub struct Out;
+
+impl EpDir for In {
+    const DIR: u8 = EP_IN;
+}
+impl EpDir for Out {
+    const DIR: u8 = EP_OUT;
+}
 
 pub struct Endpoint<D, const EP: u8> {
     usb: UsbShared,

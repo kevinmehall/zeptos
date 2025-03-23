@@ -241,16 +241,19 @@ impl UsbShared {
 
             let mask = 1u32 << (((ep >> 7) ^ 1) | (ep << 1));
             self.usb().ep_abort().write_value_set(EpAbort(mask));
+            while self.usb().ep_abort_done().read().0 & mask == 0 {}
 
             compiler_fence(Ordering::SeqCst);
 
             let buffer_control = self.ep_buffer_control(ep);
             buffer_control.modify(|w| {
+                if w.available(0) {
+                    w.set_pid(0, !w.pid(0)); // undo toggle if not sent
+                }
                 w.set_available(0, false);
                 w.set_full(0, false);
             });
 
-            while self.usb().ep_abort_done().read().0 & mask == 0 {}
             self.usb().ep_abort().write_value_clear(EpAbort(mask));
             self.usb().ep_abort_done().write_value_clear(EpAbortDone(mask));
         })
@@ -441,7 +444,7 @@ fn USBCTRL_IRQ() {
     let buf_status = USB.buff_status().read();
     USB.buff_status().write_value(buf_status);
 
-    defmt::info!("usb irq: flags {:08x} buf_status {:08x}", flags.0, buf_status.0);
+    defmt::trace!("usb irq: flags {:08x} buf_status {:08x}", flags.0, buf_status.0);
 
     if flags.bus_reset() || flags.setup_req() {
         unsafe { NOTIFY_BUS_EVENT.get_unchecked().notify() };
@@ -449,12 +452,12 @@ fn USBCTRL_IRQ() {
 
     for ep in 0..EP_COUNT {
         if buf_status.ep_out(ep) {
-            if ep > 0 { defmt::info!("wake ep{} OUT", ep) };
+            if ep > 0 { defmt::trace!("wake ep{} OUT", ep) };
             unsafe { NOTIFY_EP_OUT.get_unchecked()[ep as usize].notify() };
         }
 
         if buf_status.ep_in(ep) {
-            if ep > 0 { defmt::info!("wake ep{} IN", ep) };
+            if ep > 0 { defmt::trace!("wake ep{} IN", ep) };
             unsafe { NOTIFY_EP_IN.get_unchecked()[ep as usize].notify() };
         }
     }
