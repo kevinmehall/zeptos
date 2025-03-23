@@ -13,8 +13,14 @@ pub mod cortex_m;
 #[cfg(any(feature="samd11", feature="samd21"))]
 pub mod samd;
 
+#[cfg(any(feature="samd11", feature="samd21"))]
+pub use samd::{serial_number, SERIAL_NUMBER_LEN};
+
 #[cfg(any(feature="rp2040"))]
 pub mod rp;
+
+#[cfg(any(feature="rp2040"))]
+pub use rp::{serial_number, SERIAL_NUMBER_LEN};
 
 #[cfg(any(feature="usb"))]
 pub mod usb;

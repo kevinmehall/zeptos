@@ -169,6 +169,8 @@ fn configure_pll(p: pac::pll::Pll, config: PllConfig) {
 #[used]
 static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 
-pub fn serial_number() -> [u8; 8] {
+pub const SERIAL_NUMBER_LEN: usize = 8;
+
+pub fn serial_number() -> [u8; SERIAL_NUMBER_LEN] {
     unsafe { * &raw const FLASH_UID }
 }

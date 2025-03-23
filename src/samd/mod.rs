@@ -13,7 +13,7 @@ pub mod calibration;
 pub mod usb;
 
 mod serial_number;
-pub use serial_number::serial_number;
+pub use serial_number::{serial_number, SERIAL_NUMBER_LEN};
 
 pub(crate) fn init() {
     #![allow(unused_variables, unused_mut)]

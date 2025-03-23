@@ -23,9 +23,11 @@ pub fn split_serial_number() -> (u32, u32, u32, u32) {
     }
 }
 
+pub const SERIAL_NUMBER_LEN: usize = 16;
+
 /// Returns the serial number of the chip as an array of bytes. The serial
 /// number is only guaranteed to be unique if all 16 bytes are used.
-pub fn serial_number() -> [u8; 16] {
+pub fn serial_number() -> [u8; SERIAL_NUMBER_LEN] {
     let sn = split_serial_number();
     [
         ((sn.0 >> 24) & 0xff) as u8,
