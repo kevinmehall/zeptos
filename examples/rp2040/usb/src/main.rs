@@ -9,7 +9,6 @@ use defmt::info;
 
 use zeptos::rp::gpio::{self, TypePin, Function};
 use zeptos::{
-    cortex_m::SysTick,
     usb::descriptors::{DescriptorBuilder, LANGUAGE_LIST_US_ENGLISH},
     usb::{Endpoint, Endpoints, In, Out, Responded, Setup, UsbBuffer},
     Hardware, Runtime,
@@ -18,7 +17,7 @@ use zeptos::{
 #[zeptos::main]
 async fn main(rt: Runtime, mut hw: Hardware) {
     info!("init");
-    led_task(rt).spawn(hw.syst);
+    led_task(rt).spawn(rt);
     hw.usb.run_device(&mut ExampleDevice { rt }).await;
 }
 
@@ -104,14 +103,14 @@ async fn bulk_task(mut ep_out: Endpoint<Out, EP_OUT>, mut ep_in: Endpoint<In, EP
 }
 
 #[zeptos::task]
-async fn led_task(mut syst: SysTick) {
+async fn led_task(rt: Runtime) {
     gpio::GPIO25::set_function(Function::F5);
     gpio::GPIO25::oe_set();
 
     loop {
-        for _ in 0..10 { syst.delay(16_000_000).await; }
+        rt.delay_us(100_000).await;
         gpio::GPIO25::out_set();
-        for _ in 0..10 { syst.delay(16_000_000).await; }
+        rt.delay_us(100_000).await;
         gpio::GPIO25::out_clr();
         defmt::info!("blink");
     }

@@ -1,2 +1,2 @@
-mod systick;
-pub use systick::SysTick;
+#[cfg(all(feature="time"))]
+pub(crate) mod systick;

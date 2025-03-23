@@ -7,14 +7,13 @@ use panic_probe as _;
 use zeptos::{ Runtime, Hardware, samd::gpio::{self, TypePin} };
 
 #[zeptos::main]
-async fn main(_sp: Runtime, hw: Hardware) {
+async fn main(rt: Runtime, _hw: Hardware) {
     gpio::PB30::dirset();
-    let mut syst = hw.syst;
 
     loop {
-        syst.delay_us(100_000).await;
+        rt.delay_us(100_000).await;
         gpio::PB30::outset();
-        syst.delay_us(200_000).await;
+        rt.delay_us(200_000).await;
         gpio::PB30::outclr();
     }
 }

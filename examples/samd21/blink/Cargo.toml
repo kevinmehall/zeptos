@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-zeptos = { path = "../../../", features = ["samd21", "samd-clock-48m-external-32k-xtal"] }
+zeptos = { path = "../../../", features = ["samd21", "samd-clock-48m-external-32k-xtal", "time"] }
 panic-probe = "0.3"
 defmt = "0.3.6"
 defmt-rtt = "0.4.0"

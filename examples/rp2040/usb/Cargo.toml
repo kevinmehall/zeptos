@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-zeptos = { path = "../../../", features = ["rp2040", "rp2040-boot2-w25q080", "usb"] }
+zeptos = { path = "../../../", features = ["rp2040", "rp2040-boot2-w25q080", "usb", "time"] }
 
 panic-probe = "0.3"
 defmt = "0.3.6"

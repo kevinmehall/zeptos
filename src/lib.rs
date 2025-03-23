@@ -1,5 +1,5 @@
 #![no_std]
-#![feature(impl_trait_in_assoc_type)]
+#![feature(impl_trait_in_assoc_type, sync_unsafe_cell)]
 
 use core::marker::PhantomData;
 
@@ -22,6 +22,9 @@ pub mod rp;
 #[cfg(any(feature="rp2040"))]
 pub use rp::{serial_number, SERIAL_NUMBER_LEN};
 
+#[cfg(feature="time")]
+pub mod time;
+
 #[cfg(any(feature="usb"))]
 pub mod usb;
 
@@ -40,10 +43,12 @@ pub const CLOCK_HZ: u32 = 125_000_000;
 pub mod internal {
     pub use cortex_m_rt;
 
-    use crate::{ cortex_m::SysTick, Hardware, Runtime };
+    use crate::{ Hardware, Runtime };
 
     #[inline(always)]
-    pub unsafe fn pre_init(rt: Runtime) -> Hardware { unsafe {
+    pub unsafe fn pre_init(rt: Runtime) -> Hardware {
+        let _ = rt;
+
         cortex_m::interrupt::disable();
 
         #[cfg(any(feature = "samd11", feature = "samd21"))]
@@ -51,14 +56,15 @@ pub mod internal {
 
         #[cfg(any(feature = "rp2040"))]
         crate::rp::init();
+
+        #[cfg(feature = "time")]
+        crate::time::init();
         
         Hardware {
-            syst: SysTick::init(rt),
-
             #[cfg(all(feature = "usb"))]
-            usb: crate::usb::Usb::new(rt),
+            usb: unsafe { crate::usb::Usb::new(rt) },
         }
-    }}
+    }
 
     #[inline(always)]
     pub unsafe fn post_init() -> ! {
@@ -88,8 +94,6 @@ impl Runtime {
 }
 
 pub struct Hardware {
-    pub syst: cortex_m::SysTick,
-
     #[cfg(feature = "usb")]
     pub usb: usb::Usb,
 }

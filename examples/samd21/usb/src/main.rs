@@ -7,12 +7,8 @@ use panic_probe as _;
 
 use defmt::info;
 
-use zeptos::samd::{
-    gpio::{self, TypePin},
-    serial_number,
-};
+use zeptos::samd::serial_number;
 use zeptos::{
-    cortex_m::SysTick,
     usb::descriptors::{DescriptorBuilder, LANGUAGE_LIST_US_ENGLISH},
     usb::{Endpoint, Endpoints, In, Out, Responded, Setup, UsbBuffer},
     Hardware, Runtime,
@@ -21,7 +17,6 @@ use zeptos::{
 #[zeptos::main]
 async fn main(rt: Runtime, mut hw: Hardware) {
     info!("init");
-    led_task(rt).spawn(hw.syst);
     hw.usb.run_device(&mut ExampleDevice { rt }).await;
 }
 
@@ -103,18 +98,6 @@ async fn bulk_task(mut ep_out: Endpoint<Out, EP_OUT>, mut ep_in: Endpoint<In, EP
     loop {
         let len = ep_out.receive(&mut buf).await;
         ep_in.send(&buf, len, false).await;
-    }
-}
-
-#[zeptos::task]
-async fn led_task(mut syst: SysTick) {
-    gpio::PB30::dirset();
-
-    loop {
-        syst.delay_us(100_000).await;
-        gpio::PB30::outset();
-        syst.delay_us(200_000).await;
-        gpio::PB30::outclr();
     }
 }
 

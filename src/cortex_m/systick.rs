@@ -1,49 +1,39 @@
-use cortex_m::peripheral::{syst, SYST};
+use core::cell::SyncUnsafeCell;
+
+use cortex_m::peripheral::SYST;
 use cortex_m_rt::exception;
 
-use crate::{executor::{Interrupt, TaskOnly}, Runtime};
+use crate::{time::{tick, Instant}, Runtime};
 
 const SYST_CSR_ENABLE: u32 = 1 << 0;
 const SYST_CSR_TICKINT: u32 = 1 << 1;
 const SYST_CSR_CLKSOURCE: u32 = 1 << 2;
-const SYST_CSR_COUNTFLAG: u32 = 1 << 16;
 
-pub struct SysTick {
-    runtime: Runtime,
+pub(crate) fn init() {
+    unsafe {
+        let syst = &*SYST::PTR;
+        syst.rvr.write(crate::CLOCK_HZ / 1_000);
+        syst.cvr.write(0);
+        syst.csr.write(SYST_CSR_ENABLE | SYST_CSR_CLKSOURCE | SYST_CSR_TICKINT);
+    }
 }
 
-static INT: TaskOnly<Interrupt> = unsafe { TaskOnly::new(Interrupt::new()) };
+static NOW: SyncUnsafeCell<u32> = SyncUnsafeCell::new(0);
 
 #[exception]
 fn SysTick() {
-    unsafe { INT.get_unchecked().notify() }
+    unsafe {
+        let now = &mut *(NOW.get());
+        *now = (*now).wrapping_add(1000);
+    };
+    unsafe { tick(Runtime::steal(), now()) };
 }
 
-impl SysTick {
-    pub(crate) unsafe fn init(runtime: Runtime) -> SysTick {
-        SysTick { runtime }
-    }
+pub(crate) fn now() -> Instant{
+    unsafe { Instant(*(NOW.get())) }
+}
 
-    pub fn registers(&self) -> &syst::RegisterBlock {
-        unsafe { &*SYST::PTR }
-    }
-
-    pub async fn delay(&mut self, ticks: u32) {
-        unsafe {
-            self.registers().rvr.write(ticks);
-            self.registers().cvr.write(0);
-            self.registers().csr.write(SYST_CSR_ENABLE | SYST_CSR_CLKSOURCE | SYST_CSR_TICKINT);
-        }
-
-        INT.get(self.runtime).until(|| {
-            self.registers().csr.read() & SYST_CSR_COUNTFLAG != 0
-        }).await;
-        unsafe { self.registers().csr.write(0); }
-    }
-
-    #[cfg(feature="clock")]
-    pub async fn delay_us(&mut self, us: u32) {
-        self.delay(us * (crate::CLOCK_HZ / 1_000_000)).await
-    }
+pub(crate) fn schedule(_time: Option<Instant>) {
+    // no-op, we're going to call `tick()` every millisecond anyway
 }
 
