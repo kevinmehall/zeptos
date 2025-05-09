@@ -89,6 +89,7 @@ pub struct ControlIn<'a> {
 pub struct ControlOut<'a> {
     usb: Endpoint0,
     length: u16,
+    remaining: u16,
     _lt: PhantomData<&'a UsbShared>,
 }
 
@@ -142,7 +143,22 @@ impl<'a> ControlOut<'a> {
         self.length as usize
     }
 
+    pub fn remaining(&self) -> usize {
+        self.remaining as usize
+    }
+
+    pub async fn receive(&mut self) -> &[u8] {
+        if self.remaining > 0 {
+            let data = self.usb.ep0_transfer_out().await;
+            self.remaining = self.remaining.saturating_sub(data.len() as u16);
+            data
+        } else {
+            &[]
+        }
+    }
+
     pub async fn accept(mut self) -> Responded {
+        debug_assert!(self.remaining == 0);
         debug!("accept OUT request");
         self.usb.ep0_transfer_in(&[], true).await;
         debug!("status stage complete");
@@ -203,6 +219,7 @@ impl<'a> Setup<'a> {
                 if packet[0] & DIRECTION_MASK == direction::OUT {
                     ControlData::Out(ControlOut {
                         length,
+                        remaining: length,
                         usb,
                         _lt: PhantomData,
                     })

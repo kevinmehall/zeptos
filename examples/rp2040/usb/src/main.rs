@@ -88,10 +88,16 @@ impl zeptos::usb::Handler for ExampleDevice {
                 self.count.set(self.count.get() + 1);
                 data.respond(&self.count.get().to_le_bytes()).await
             }
-            Setup { ty: Vendor, recipient: Device, request: REQ_ECHO, value, index, data: Out(data) } => {
+            Setup { ty: Vendor, recipient: Device, request: REQ_ECHO, value, index, data: Out(mut data) } => {
                 let mut echo = self.echo_payload.borrow_mut();
+                let d = data.receive().await;
+                let len = d.len().min(12);
                 echo[0..2].copy_from_slice(&value.to_le_bytes());
                 echo[2..4].copy_from_slice(&index.to_le_bytes());
+                echo[4..4 + len].copy_from_slice(&d[..len]);
+                if data.remaining() != 0 {
+                    return data.reject();
+                }
                 data.accept().await
             }
             Setup { ty: Vendor, recipient: Device, request: REQ_ECHO, value: _, index: _, data: In(data) } => {
