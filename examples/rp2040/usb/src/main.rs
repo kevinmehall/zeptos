@@ -127,9 +127,12 @@ impl ExampleDevice {
     fn configure(&self, endpoints: &mut Endpoints) {
         self.unconfigure();
         info!("Configure");
-        let ep_out = endpoints.bulk_out::<EP_OUT>();
-        let ep_in = endpoints.bulk_in::<EP_IN>();
-        bulk_task(self.rt).spawn(ep_out, ep_in);
+        let ep_echo_out = endpoints.bulk_out::<EP_ECHO_OUT>();
+        let ep_echo_in = endpoints.bulk_in::<EP_ECHO_IN>();
+        echo_task(self.rt).spawn(ep_echo_out, ep_echo_in);
+
+        let ep_stream_in = endpoints.bulk_in::<EP_STREAM_IN>();
+        stream_task(self.rt).spawn(ep_stream_in);
 
         let ep_int_in = endpoints.interrupt_in::<EP_INT_IN>();
         periodic_task(self.rt).spawn(self.rt, ep_int_in);
@@ -137,17 +140,31 @@ impl ExampleDevice {
 
     fn unconfigure(&self) {
         info!("Unconfigure");
-        bulk_task(self.rt).cancel();
+        echo_task(self.rt).cancel();
+        stream_task(self.rt).cancel();
         periodic_task(self.rt).cancel();
     }
 }
 
-const EP_OUT: u8 = 0x01;
-const EP_IN: u8 = 0x81;
+const EP_ECHO_OUT: u8 = 0x01;
+const EP_ECHO_IN: u8 = 0x81;
 const EP_INT_IN: u8 = 0x82;
+const EP_STREAM_IN: u8 = 0x83;
 
 #[zeptos::task]
-async fn bulk_task(mut ep_out: Endpoint<Out, EP_OUT>, mut ep_in: Endpoint<In, EP_IN>) {
+async fn stream_task(mut ep_in: Endpoint<In, EP_STREAM_IN>) {
+    let mut count: u32 = 0;
+    let mut buf = UsbBuffer::<64>::new();
+    loop {
+        buf[0..4].copy_from_slice(&count.to_le_bytes());
+        ep_in.send(&buf, buf.len(), false).await;
+        count = count.wrapping_add(1);
+    }
+}
+
+
+#[zeptos::task]
+async fn echo_task(mut ep_out: Endpoint<Out, EP_ECHO_OUT>, mut ep_in: Endpoint<In, EP_ECHO_IN>) {
     let mut buf = UsbBuffer::<64>::new();
     loop {
         let len = ep_out.receive(&mut buf).await;
@@ -181,7 +198,7 @@ async fn periodic_task(rt: Runtime, mut ep_int_in: Endpoint<In, EP_INT_IN>) {
         future::select(time, send).await;
         
         defmt::info!("blink");
-        count += 1;
+        count = count.wrapping_add(1);
     }
 }
 
@@ -229,14 +246,14 @@ static CONFIG_DESCRIPTOR: &[u8] = descriptors! {
             iInterface: 0,
 
             +EndpointDescriptor {
-                bEndpointAddress: EP_OUT,
+                bEndpointAddress: EP_ECHO_OUT,
                 bmAttributes: usb::endpoint_attributes::transfer_type::BULK,
                 wMaxPacketSize: 64,
                 bInterval: 0,
             }
 
             +EndpointDescriptor {
-                bEndpointAddress: EP_IN,
+                bEndpointAddress: EP_ECHO_IN,
                 bmAttributes: usb::endpoint_attributes::transfer_type::BULK,
                 wMaxPacketSize: 64,
                 bInterval: 0,
@@ -247,6 +264,13 @@ static CONFIG_DESCRIPTOR: &[u8] = descriptors! {
                 bmAttributes: usb::endpoint_attributes::transfer_type::INTERRUPT,
                 wMaxPacketSize: 64,
                 bInterval: 10,
+            }
+
+            +EndpointDescriptor {
+                bEndpointAddress: EP_STREAM_IN,
+                bmAttributes: usb::endpoint_attributes::transfer_type::BULK,
+                wMaxPacketSize: 64,
+                bInterval: 0,
             }
         }
     }
