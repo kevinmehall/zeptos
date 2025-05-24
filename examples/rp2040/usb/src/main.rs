@@ -13,7 +13,7 @@ use futures_util::future;
 
 use zeptos::rp::gpio::{self, TypePin, Function};
 use zeptos::{
-    usb::descriptors::{DescriptorBuilder, LANGUAGE_LIST_US_ENGLISH},
+    usb::descriptors::{DescriptorBuilder, LANGUAGE_LIST_US_ENGLISH, MicrosoftOsCompatibleID, MicrosoftOs, BinaryObjectStore, PlatformCapabilityMicrosoftOs},
     usb::{Endpoint, Endpoints, In, Out, Responded, Setup, UsbBuffer},
     Hardware, Runtime,
 };
@@ -42,10 +42,11 @@ impl zeptos::usb::Handler for ExampleDevice {
         _lang: u16,
         builder: &'a mut DescriptorBuilder,
     ) -> Option<&'a [u8]> {
-        use usb::descriptor_type::{CONFIGURATION, DEVICE, STRING};
+        use usb::descriptor_type::{CONFIGURATION, DEVICE, STRING, BOS};
         match (kind, index) {
             (DEVICE, _) => Some(DEVICE_DESCRIPTOR),
             (CONFIGURATION, 0) => Some(CONFIG_DESCRIPTOR),
+            (BOS, 0) => Some(BOS_DESCRIPTOR),
             (STRING, 0) => Some(LANGUAGE_LIST_US_ENGLISH),
             (STRING, STRING_MFG) => Some(builder.string_ascii("zeptos project")),
             (STRING, STRING_PRODUCT) => Some(builder.string_ascii("rp2040 test device")),
@@ -84,6 +85,9 @@ impl zeptos::usb::Handler for ExampleDevice {
         use zeptos::usb::Recipient::*;
 
         match req {
+            Setup { ty: Vendor, recipient: Device, request: MSOS_VENDOR_CODE, index: 0x07, data: In(data), .. } => {
+                data.respond(&MSOS_DESCRIPTOR).await
+            }
             Setup { ty: Vendor, recipient: Device, request: REQ_COUNT, value: _, index: _, data: In(data) } => {
                 self.count.set(self.count.get() + 1);
                 data.respond(&self.count.get().to_le_bytes()).await
@@ -191,7 +195,7 @@ const STRING_SERIAL: u8 = 3;
 
 static DEVICE_DESCRIPTOR: &[u8] = descriptors! {
     Device {
-        bcdUSB: 0x0200,
+        bcdUSB: 0x0201,
         bDeviceClass: ::usb::class_code::VENDOR_SPECIFIC,
         bDeviceSubClass: 0x00,
         bDeviceProtocol: 0x00,
@@ -241,6 +245,17 @@ static CONFIG_DESCRIPTOR: &[u8] = descriptors! {
                 wMaxPacketSize: 64,
                 bInterval: 10,
             }
+        }
+    }
+};
+
+pub const MSOS_DESCRIPTOR: &[u8] = descriptors!{
+    MicrosoftOs {
+        windows_version: 0x06030000,
+
+        +MicrosoftOsCompatibleID {
+            compatible_id: "WINUSB",
+            sub_compatible_id: "",
         }
     }
 };
