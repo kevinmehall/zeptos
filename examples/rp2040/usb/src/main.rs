@@ -18,6 +18,9 @@ use zeptos::{
     Hardware, Runtime,
 };
 
+#[cfg(feature = "msos_composite")]
+use zeptos::usb::descriptors::{MicrosoftOsCcgp, MicrosoftOsConfiguration, MicrosoftOsFunction, MicrosoftOsDeviceInterfaceGUID};
+
 #[zeptos::main]
 async fn main(rt: Runtime, mut hw: Hardware) {
     info!("init");
@@ -202,7 +205,7 @@ static DEVICE_DESCRIPTOR: &[u8] = descriptors! {
         bMaxPacketSize0: 64,
         idVendor: 0x59e3,
         idProduct: 0x00AA,
-        bcdDevice: 0x0000,
+        bcdDevice: const { if cfg!(feature = "msos_composite") { 0x0001 } else { 0x0000 } },
         iManufacturer: STRING_MFG,
         iProduct: STRING_PRODUCT,
         iSerialNumber: STRING_SERIAL,
@@ -249,13 +252,54 @@ static CONFIG_DESCRIPTOR: &[u8] = descriptors! {
     }
 };
 
-pub const MSOS_DESCRIPTOR: &[u8] = descriptors!{
+#[cfg(not(feature = "msos_composite"))]
+const MSOS_DESCRIPTOR: &[u8] = descriptors!{
     MicrosoftOs {
         windows_version: 0x06030000,
-
+        
         +MicrosoftOsCompatibleID {
             compatible_id: "WINUSB",
             sub_compatible_id: "",
         }
     }
 };
+
+#[cfg(feature = "msos_composite")]
+const MSOS_DESCRIPTOR: &[u8] = descriptors!{
+    MicrosoftOs {
+        windows_version: 0x06030000,
+
+        +MicrosoftOsCcgp {}
+
+        +MicrosoftOsConfiguration {
+            configuration_value: 0,
+
+            +MicrosoftOsFunction {
+                first_interface: 0,
+
+                +MicrosoftOsCompatibleID {
+                    compatible_id: "WINUSB",
+                    sub_compatible_id: "",
+                }
+
+                +MicrosoftOsDeviceInterfaceGUID {
+                    guid: "{420F4791-4A3B-40A6-B8E9-4F63EF6017B9}",
+                }
+            }
+        }
+    }
+};
+
+pub const MSOS_VENDOR_CODE: u8 = 0xf0;
+
+pub static BOS_DESCRIPTOR: &[u8] = descriptors!{
+    BinaryObjectStore {
+        +PlatformCapabilityMicrosoftOs {
+            windows_version: 0x06030000,
+            vendor_code: MSOS_VENDOR_CODE,
+            alt_enum_code: 0,
+            msos_descriptor_len: MSOS_DESCRIPTOR.len(),
+        }
+    }
+};
+

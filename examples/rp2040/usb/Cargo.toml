@@ -28,3 +28,5 @@ codegen-units = 1
 lto = true
 opt-level = "z"
 
+[features]
+msos_composite = []

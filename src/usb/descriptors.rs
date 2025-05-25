@@ -292,6 +292,7 @@ const MS_OS_20_SUBSET_HEADER_CONFIGURATION: u8 = 0x01;
 const MS_OS_20_SUBSET_HEADER_FUNCTION: u8 = 0x02;
 const MS_OS_20_FEATURE_COMPATBLE_ID: u8 = 0x03;
 const MS_OS_20_FEATURE_REG_PROPERTY: u8 = 0x04;
+const MS_OS_20_FEATURE_CCGP_DEVICE: u8 = 0x07;
 
 pub struct MicrosoftOs {
     pub windows_version: u32,
@@ -452,6 +453,24 @@ impl MicrosoftOsDeviceInterfaceGUID {
         bytes
     }
 }
+
+pub struct MicrosoftOsCcgp {}
+
+impl MicrosoftOsCcgp {
+    pub const LEN: usize = 4;
+    pub const DESCRIPTOR_TYPE: u8 = MS_OS_20_FEATURE_CCGP_DEVICE;
+
+    pub const fn bytes(self, _children: &[&[u8]]) -> [u8; Self::LEN] {
+        [
+            Self::LEN as u8,
+            0,
+            Self::DESCRIPTOR_TYPE,
+            0,
+        ]
+    }
+}
+
+
 
 /// Builder for runtime-generated string descriptors
 pub struct DescriptorBuilder {
