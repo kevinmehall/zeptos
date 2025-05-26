@@ -41,6 +41,7 @@ pub const CLOCK_HZ: u32 = 125_000_000;
 
 #[doc(hidden)]
 pub mod internal {
+    use cortex_m::peripheral::SCB;
     pub use cortex_m_rt;
 
     use crate::{ Hardware, Runtime };
@@ -69,6 +70,7 @@ pub mod internal {
     #[inline(always)]
     pub unsafe fn post_init() -> ! {
         unsafe {
+            (*SCB::PTR).scr.write(0x1 << 1); // Enable SLEEPONEXIT
             cortex_m::interrupt::enable();
         }
         loop {
