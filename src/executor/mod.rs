@@ -27,11 +27,11 @@ static VTABLE: RawWakerVTable = RawWakerVTable::new(
     drop
 );
 
-pub unsafe fn waker_clone(d: *const ()) -> RawWaker {
+unsafe fn waker_clone(d: *const ()) -> RawWaker {
     RawWaker::new(d, &VTABLE)
 }
 
-pub unsafe fn waker_wake(p: *const ()) {
+unsafe fn waker_wake(p: *const ()) {
     let node = unsafe { &*(p as *const RunQueueNode) };
     RUN_QUEUE.enqueue(node);
     SCB::set_pendsv();

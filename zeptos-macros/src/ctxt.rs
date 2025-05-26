@@ -1,3 +1,4 @@
+// Based on Embassy, under MIT OR Apache-2.0
 // nifty utility borrowed from serde :)
 // https://github.com/serde-rs/serde/blob/master/serde_derive/src/internals/ctxt.rs
 

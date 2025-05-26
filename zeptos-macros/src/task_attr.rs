@@ -1,3 +1,4 @@
+// Based on Embassy, under MIT OR Apache-2.0
 use darling::export::NestedMeta;
 use darling::FromMeta;
 use proc_macro2::TokenStream;
@@ -115,36 +116,36 @@ pub fn run(args: &[NestedMeta], f: syn::ItemFn) -> Result<TokenStream, TokenStre
         impl #task_handle_ty {
             pub fn spawn(self, #fargs) {
                 unsafe {
-                    <Self as ::zeptos::executor::Task>::storage().spawn(<() as #trait_ident>::construct(#(#full_args,)*))
+                    <Self as ::zeptos::internal::Task>::storage().spawn(<() as #trait_ident>::construct(#(#full_args,)*))
                 }
             }
 
             pub fn cancel(self) {
                 unsafe {
-                    <Self as ::zeptos::executor::Task>::storage().cancel()
+                    <Self as ::zeptos::internal::Task>::storage().cancel()
                 }
 
             }
 
             pub fn is_running(self) -> bool {
                 unsafe {
-                    <Self as ::zeptos::executor::Task>::storage().is_running()
+                    <Self as ::zeptos::internal::Task>::storage().is_running()
                 }
             }
         }
 
-        impl ::zeptos::executor::Task for #task_handle_ty {
+        impl ::zeptos::internal::Task for #task_handle_ty {
             type Fut = <() as #trait_ident>::Fut;
 
             #[inline(always)]
-            fn storage() -> &'static ::zeptos::executor::TaskStorage<Self> {
-                static STORAGE: ::zeptos::executor::TaskStorage::<#task_handle_ty> = ::zeptos::executor::TaskStorage::new();
+            fn storage() -> &'static ::zeptos::internal::TaskStorage<Self> {
+                static STORAGE: ::zeptos::internal::TaskStorage::<#task_handle_ty> = ::zeptos::internal::TaskStorage::new();
                 &STORAGE
             }
 
             #[inline(always)]
-            fn node() -> &'static ::zeptos::executor::RunQueueNode {
-                static NODE: ::zeptos::executor::RunQueueNode = ::zeptos::executor::RunQueueNode::new(<#task_handle_ty as ::zeptos::executor::Task>::poll);
+            fn node() -> &'static ::zeptos::internal::RunQueueNode {
+                static NODE: ::zeptos::internal::RunQueueNode = ::zeptos::internal::RunQueueNode::new(<#task_handle_ty as ::zeptos::internal::Task>::poll);
                 &NODE
             }
 

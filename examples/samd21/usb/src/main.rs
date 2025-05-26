@@ -7,7 +7,6 @@ use panic_probe as _;
 
 use defmt::info;
 
-use zeptos::samd::serial_number;
 use zeptos::{
     usb::descriptors::{DescriptorBuilder, LANGUAGE_LIST_US_ENGLISH},
     usb::{Endpoint, Endpoints, In, Out, Responded, Setup, UsbBuffer},
@@ -38,7 +37,7 @@ impl zeptos::usb::Handler for ExampleDevice {
             (STRING, 0) => Some(LANGUAGE_LIST_US_ENGLISH),
             (STRING, STRING_MFG) => Some(builder.string_ascii("zeptos project")),
             (STRING, STRING_PRODUCT) => Some(builder.string_ascii("samd21 test device")),
-            (STRING, STRING_SERIAL) => Some(builder.string_hex(&serial_number())),
+            (STRING, STRING_SERIAL) => Some(builder.string_hex(&zeptos::serial_number())),
             _ => None,
         }
     }

@@ -22,8 +22,6 @@ pub const CLK_REF_HZ: u32 = XOSC_HZ;
 pub const CLK_SYS_HZ: u32 = PLL_SYS_HZ;
 pub const CLK_PERI_HZ: u32 = PLL_USB_HZ;
 
-static mut FLASH_UID: [u8; 8] = [0; 8];
-
 pub(crate) fn init() {
     #![allow(unused_variables, unused_mut)]
     
@@ -107,10 +105,8 @@ pub(crate) fn init() {
     while ((!pac::RESETS.reset_done().read().0) & enable.0) != 0 {}
 
     unsafe {
-        cortex_m::interrupt::disable();
-        // SAFETY: interrupts have not been enabled and core 1 is halted
-        flash::flash_unique_id(&mut * &raw mut FLASH_UID, true);
-        cortex_m::interrupt::enable();
+        // SAFETY: interrupts are disabled on init and core 1 is halted
+        flash::flash_unique_id(&mut * &raw mut serial_number::FLASH_UID, true);
     }
 }
 
@@ -169,8 +165,15 @@ fn configure_pll(p: pac::pll::Pll, config: PllConfig) {
 #[used]
 static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 
-pub const SERIAL_NUMBER_LEN: usize = 8;
 
-pub fn serial_number() -> [u8; SERIAL_NUMBER_LEN] {
-    unsafe { * &raw const FLASH_UID }
+pub(crate) mod serial_number {
+    /// Length of the array returned by `serial_number()`.
+    pub const SERIAL_NUMBER_LEN: usize = 8;
+    
+    pub(crate) static mut FLASH_UID: [u8; 8] = [0; SERIAL_NUMBER_LEN];
+    
+    /// Get the unique ID of the flash device.
+    pub fn serial_number() -> [u8; SERIAL_NUMBER_LEN] {
+        unsafe { * &raw const FLASH_UID }
+    }
 }

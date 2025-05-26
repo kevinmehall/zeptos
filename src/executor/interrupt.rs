@@ -9,6 +9,10 @@ use crate::Runtime;
 
 use super::RunQueueNode;
 
+/// Event handling primitive for waiting for an interrupt.
+///
+/// This is normally placed in a `static`. An ISR can call `notify` to
+/// wake the task that is waiting on the future returned by `until`.
 pub struct Interrupt {
     poll_fn: Cell<Option<unsafe fn()>>,
 }
@@ -83,7 +87,8 @@ impl<F: Fn() -> R, R: UntilOutput> Future for Until<'_, F> {
     }
 }
 
-/// Send + Sync wrapper for a value that is not Send + Sync but can only be accessed from a task.
+/// Wrapper for placing a value that is not Send + Sync in a `static` but only
+/// allowing it to be accessed from a task.
 #[repr(transparent)]
 pub struct TaskOnly<T>(T);
 

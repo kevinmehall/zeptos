@@ -1,3 +1,4 @@
+// Based on Embassy, under MIT OR Apache-2.0
 use darling::export::NestedMeta;
 use darling::FromMeta;
 use proc_macro2::TokenStream;

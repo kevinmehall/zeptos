@@ -280,7 +280,7 @@ struct FlashCommand {
 /// Not all SPI flashes implement this command, so check the JEDEC
 /// ID before relying on it. The Winbond parts commonly seen on
 /// RP2040 devboards (JEDEC=0xEF7015) support an 8-byte unique ID;
-/// https://forums.raspberrypi.com/viewtopic.php?t=331949 suggests
+/// <https://forums.raspberrypi.com/viewtopic.php?t=331949> suggests
 /// that LCSC (Zetta) parts have a 16-byte unique ID (which is
 /// *not* unique in just its first 8 bytes),
 /// JEDEC=0xBA6015. Macronix and Spansion parts do not have a

@@ -1,3 +1,15 @@
+//! A tiny runtime for async Rust on microcontrollers.
+//! 
+//! The functionality of this crate is enabled by Cargo features:
+//! 
+//! * `samd11` or `samd21`: Support for the SAM D11 or D21 microcontrollers.
+//!     * `samd-clock-48m-usb`, `samd-clock-48m-internal`, `samd-clock-48m-external-32k-osc`, or `samd-clock-48m-external-32k-xtal`: Configure the clock source
+//! * `rp2040`: Support for the Raspberry Pi RP2040 microcontroller.
+//!    * `rp2040-boot2-w25q080`
+//!    * `rom-func-cache`
+//! 
+//! * `usb`: Enables USB support.
+//! * `time`: Enables systick timer.
 #![no_std]
 #![feature(impl_trait_in_assoc_type, sync_unsafe_cell)]
 
@@ -6,21 +18,22 @@ use core::marker::PhantomData;
 pub use zeptos_macros::main_cortex_m as main;
 pub use zeptos_macros::task;
 
-pub mod executor;
+mod executor;
+pub use executor::{Interrupt, TaskOnly};
 
-pub mod cortex_m;
+mod cortex_m;
 
 #[cfg(any(feature="samd11", feature="samd21"))]
 pub mod samd;
 
 #[cfg(any(feature="samd11", feature="samd21"))]
-pub use samd::{serial_number, SERIAL_NUMBER_LEN};
+pub use samd::{serial_number::{serial_number, SERIAL_NUMBER_LEN}};
 
 #[cfg(any(feature="rp2040"))]
 pub mod rp;
 
 #[cfg(any(feature="rp2040"))]
-pub use rp::{serial_number, SERIAL_NUMBER_LEN};
+pub use rp::{serial_number::{serial_number, SERIAL_NUMBER_LEN}};
 
 #[cfg(feature="time")]
 pub mod time;
@@ -39,12 +52,12 @@ pub const CLOCK_HZ: u32 = 48_000_000;
 #[cfg(feature="rp2040")]
 pub const CLOCK_HZ: u32 = 125_000_000;
 
+/// Interface with the macro-generated code
 #[doc(hidden)]
 pub mod internal {
-    use cortex_m::peripheral::SCB;
     pub use cortex_m_rt;
 
-    use crate::{ Hardware, Runtime };
+    pub use crate::{ Hardware, Runtime, executor::{ RunQueue, RunQueueNode, Task, TaskStorage } };
 
     #[inline(always)]
     pub unsafe fn pre_init(rt: Runtime) -> Hardware {
@@ -70,6 +83,7 @@ pub mod internal {
     #[inline(always)]
     pub unsafe fn post_init() -> ! {
         unsafe {
+            use cortex_m::peripheral::SCB;
             (*SCB::PTR).scr.write(0x1 << 1); // Enable SLEEPONEXIT
             cortex_m::interrupt::enable();
         }
@@ -86,7 +100,10 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    /// SAFETY: Can only be called from inside a task, and not
+    /// Create a new `Runtime` token by assuming that we are running on the task thread.
+    /// 
+    /// ## Safety
+    /// Can only be called from inside a task, and not
     /// on another core or at a higher interrupt priority.
     pub unsafe fn steal() -> Runtime {
         Runtime {
@@ -95,6 +112,9 @@ impl Runtime {
     }
 }
 
+/// Exclusive access to peripherals passed to the main task.
+/// 
+/// The fields in this struct depend on the cargo features enabled.
 pub struct Hardware {
     #[cfg(feature = "usb")]
     pub usb: usb::Usb,

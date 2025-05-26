@@ -30,18 +30,14 @@ usb = "0.3.0"
 samd21 = ["dep:atsamd21j"]
 samd11 = ["dep:atsamd11d"]
 
-samd-clock-48m-usb = ["clock"]
-samd-clock-48m-internal = ["clock"]
-samd-clock-48m-external-32k-xtal = ["clock"]
-samd-clock-48m-external-32k-osc = ["clock"]
+samd-clock-48m-usb = []
+samd-clock-48m-internal = []
+samd-clock-48m-external-32k-xtal = []
+samd-clock-48m-external-32k-osc = []
 
-rp2040 = ["dep:rp-pac", "rp-pac/rp2040", "clock"]
+rp2040 = ["dep:rp-pac", "rp-pac/rp2040"]
 rp2040-boot2-w25q080 = ["rp2040-boot2"]
 rom-func-cache = []
 
 usb = []
 time = []
-
-clock = []
-
-
