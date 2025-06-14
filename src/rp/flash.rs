@@ -45,11 +45,11 @@ fn flash_function_pointers(erase: bool, write: bool) -> FlashFunctionPointers<'s
 /// # Safety
 ///
 /// `boot2` must contain a valid 2nd stage boot loader which can be called to re-initialize XIP mode
-unsafe fn flash_function_pointers_with_boot2(
+unsafe fn flash_function_pointers_with_boot2<'a>(
     erase: bool,
     write: bool,
-    boot2: &[u32; 64],
-) -> FlashFunctionPointers {
+    boot2: &'a [u32; 64],
+) -> FlashFunctionPointers<'a> {
     unsafe {
         let boot2_fn_ptr = (boot2 as *const u32 as *const u8).offset(1);
         let boot2_fn: unsafe extern "C" fn() -> () = core::mem::transmute(boot2_fn_ptr);
