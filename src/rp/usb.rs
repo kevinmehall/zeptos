@@ -336,7 +336,7 @@ impl UsbShared {
                 w.set_available(0, true);
             });
             
-            debug!("start OUT to {:02x}: DATA{}", ep, pid as u8);
+            debug!("start OUT to {:02x}: DATA{}, {} bytes remaining", ep, pid as u8, slice.len());
 
             let pkt_len = NOTIFY_EP_OUT.get(self.rt)[(ep & 0xF) as usize]
                 .until(|| {
@@ -348,15 +348,15 @@ impl UsbShared {
             // The hardware is done writing the buffer
             compiler_fence(Ordering::Acquire);
 
-            debug!("completed OUT to {:02x}: {} bytes", ep, pkt_len);
+            debug!("completed OUT to {:02x}, {} bytes", ep, pkt_len);
 
-            assert!(pkt_len <= slice.len());
+            debug_assert!(pkt_len <= slice.len());
 
             unsafe { slice.as_mut_ptr().copy_from_nonoverlapping(buf, pkt_len) }
             total_len += pkt_len;
             slice = &mut slice[pkt_len..];
 
-            if pkt_len < 64 {
+            if pkt_len < 64 || slice.is_empty() {
                 break
             }
         }

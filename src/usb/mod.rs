@@ -529,8 +529,8 @@ pub struct Endpoint<D, const EP: u8> {
 
 impl<const EP: u8> Endpoint<Out, EP> {
     pub fn receive<const SIZE: usize>(&mut self, buf: &mut UsbBuffer<SIZE>) -> impl Future<Output = usize> + '_ {
-        assert!(SIZE >= 64);
-        unsafe { self.usb.transfer_out(EP, buf.as_mut_ptr(), buf.len()) }
+        const { assert!(SIZE >= 64 && SIZE % 64 == 0) };
+        unsafe { self.usb.transfer_out(EP, buf.as_mut_ptr(), SIZE) }
     }
 }
 
