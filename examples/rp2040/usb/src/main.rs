@@ -54,6 +54,8 @@ impl zeptos::usb::Handler for ExampleDevice {
             (STRING, STRING_MFG) => Some(builder.string_ascii("zeptos project")),
             (STRING, STRING_PRODUCT) => Some(builder.string_ascii("rp2040 test device")),
             (STRING, STRING_SERIAL) => Some(builder.string_hex(&zeptos::serial_number())),
+            (STRING, STRING_INTF_MAIN) => Some(builder.string_ascii("Test Interface")),
+            (STRING, STRING_INTF_ECHO) => Some(builder.string_ascii("Echo Interface")),
             _ => None,
         }
     }
@@ -61,11 +63,13 @@ impl zeptos::usb::Handler for ExampleDevice {
     async fn set_configuration(&self, cfg: u8, endpoints: &mut Endpoints) -> Result<(), ()> {
         match cfg {
             0 => {
-                self.unconfigure();
+                self.unconfigure_main();
+                self.unconfigure_echo();
                 Ok(())
             }
             CFG_MAIN => {
-                self.configure(endpoints);
+                self.configure_main(endpoints);
+                self.unconfigure_echo();
                 Ok(())
             }
             _ => Err(()),
@@ -75,7 +79,15 @@ impl zeptos::usb::Handler for ExampleDevice {
     async fn set_interface(&self, intf: u8, alt: u8, endpoints: &mut Endpoints) -> Result<(), ()> {
         match (intf, alt) {
             (INTF_MAIN, 0) => {
-                self.configure(endpoints);
+                self.configure_main(endpoints);
+                Ok(())
+            }
+            (INTF_ECHO, 0) => {
+                self.unconfigure_echo();
+                Ok(())
+            }
+            (INTF_ECHO, 1) => {
+                self.configure_echo(endpoints);
                 Ok(())
             }
             _ => Err(()),
@@ -124,25 +136,38 @@ impl zeptos::usb::Handler for ExampleDevice {
 }
 
 impl ExampleDevice {
-    fn configure(&self, endpoints: &mut Endpoints) {
-        self.unconfigure();
-        info!("Configure");
-        let ep_echo_out = endpoints.bulk_out::<EP_ECHO_OUT>();
-        let ep_echo_in = endpoints.bulk_in::<EP_ECHO_IN>();
-        echo_task(self.rt).spawn(ep_echo_out, ep_echo_in);
+    fn configure_main(&self, endpoints: &mut Endpoints) {
+        self.unconfigure_main();
+        info!("Configure main interface");
 
         let ep_stream_in = endpoints.bulk_in::<EP_STREAM_IN>();
-        stream_task(self.rt).spawn(ep_stream_in);
+        stream_in_task(self.rt).spawn(ep_stream_in);
+
+        let ep_stream_out = endpoints.bulk_out::<EP_STREAM_OUT>();
+        stream_out_task(self.rt).spawn(ep_stream_out);
 
         let ep_int_in = endpoints.interrupt_in::<EP_INT_IN>();
         periodic_task(self.rt).spawn(self.rt, ep_int_in);
     }
 
-    fn unconfigure(&self) {
-        info!("Unconfigure");
-        echo_task(self.rt).cancel();
-        stream_task(self.rt).cancel();
+    fn unconfigure_main(&self) {
+        info!("Unconfigure main interface");
+        stream_in_task(self.rt).cancel();
+        stream_out_task(self.rt).cancel();
         periodic_task(self.rt).cancel();
+    }
+
+    fn configure_echo(&self, endpoints: &mut Endpoints) {
+        self.unconfigure_echo();
+        info!("Configure echo interface");
+        let ep_echo_out = endpoints.bulk_out::<EP_ECHO_OUT>();
+        let ep_echo_in = endpoints.bulk_in::<EP_ECHO_IN>();
+        echo_task(self.rt).spawn(ep_echo_out, ep_echo_in);
+    }
+
+    fn unconfigure_echo(&self) {
+        info!("Unconfigure echo interface");
+        echo_task(self.rt).cancel();
     }
 }
 
@@ -150,15 +175,24 @@ const EP_ECHO_OUT: u8 = 0x01;
 const EP_ECHO_IN: u8 = 0x81;
 const EP_INT_IN: u8 = 0x82;
 const EP_STREAM_IN: u8 = 0x83;
+const EP_STREAM_OUT: u8 = 0x03;
 
 #[zeptos::task]
-async fn stream_task(mut ep_in: Endpoint<In, EP_STREAM_IN>) {
+async fn stream_in_task(mut ep_in: Endpoint<In, EP_STREAM_IN>) {
     let mut count: u32 = 0;
     let mut buf = UsbBuffer::<64>::new();
     loop {
         buf[0..4].copy_from_slice(&count.to_le_bytes());
         ep_in.send(&buf, buf.len(), false).await;
         count = count.wrapping_add(1);
+    }
+}
+
+#[zeptos::task]
+async fn stream_out_task(mut ep_in: Endpoint<Out, EP_STREAM_OUT>) {
+    let mut buf = UsbBuffer::<64>::new();
+    loop {
+        ep_in.receive(&mut buf).await;
     }
 }
 
@@ -208,10 +242,13 @@ use zeptos::usb::descriptors::{
 
 const CFG_MAIN: u8 = 1;
 const INTF_MAIN: u8 = 0;
+const INTF_ECHO: u8 = 1;
 
 const STRING_MFG: u8 = 1;
 const STRING_PRODUCT: u8 = 2;
 const STRING_SERIAL: u8 = 3;
+const STRING_INTF_MAIN: u8 = 4;
+const STRING_INTF_ECHO: u8 = 5;
 
 static DEVICE_DESCRIPTOR: &[u8] = descriptors! {
     Device {
@@ -243,21 +280,7 @@ static CONFIG_DESCRIPTOR: &[u8] = descriptors! {
             bInterfaceClass: usb::class_code::VENDOR_SPECIFIC,
             bInterfaceSubClass: 0,
             bInterfaceProtocol: 0,
-            iInterface: 0,
-
-            +EndpointDescriptor {
-                bEndpointAddress: EP_ECHO_OUT,
-                bmAttributes: usb::endpoint_attributes::transfer_type::BULK,
-                wMaxPacketSize: 64,
-                bInterval: 0,
-            }
-
-            +EndpointDescriptor {
-                bEndpointAddress: EP_ECHO_IN,
-                bmAttributes: usb::endpoint_attributes::transfer_type::BULK,
-                wMaxPacketSize: 64,
-                bInterval: 0,
-            }
+            iInterface: STRING_INTF_MAIN,
 
             +EndpointDescriptor {
                 bEndpointAddress: EP_INT_IN,
@@ -268,6 +291,45 @@ static CONFIG_DESCRIPTOR: &[u8] = descriptors! {
 
             +EndpointDescriptor {
                 bEndpointAddress: EP_STREAM_IN,
+                bmAttributes: usb::endpoint_attributes::transfer_type::BULK,
+                wMaxPacketSize: 64,
+                bInterval: 0,
+            }
+
+            +EndpointDescriptor {
+                bEndpointAddress: EP_STREAM_OUT,
+                bmAttributes: usb::endpoint_attributes::transfer_type::BULK,
+                wMaxPacketSize: 64,
+                bInterval: 0,
+            }
+        }
+
+        +Interface {
+            bInterfaceNumber: INTF_ECHO,
+            bAlternateSetting: 0,
+            bInterfaceClass: usb::class_code::VENDOR_SPECIFIC,
+            bInterfaceSubClass: 0,
+            bInterfaceProtocol: 0,
+            iInterface: STRING_INTF_ECHO,
+        }
+
+        +Interface {
+            bInterfaceNumber: INTF_ECHO,
+            bAlternateSetting: 1,
+            bInterfaceClass: usb::class_code::VENDOR_SPECIFIC,
+            bInterfaceSubClass: 0,
+            bInterfaceProtocol: 0,
+            iInterface: STRING_INTF_ECHO,
+
+            +EndpointDescriptor {
+                bEndpointAddress: EP_ECHO_OUT,
+                bmAttributes: usb::endpoint_attributes::transfer_type::BULK,
+                wMaxPacketSize: 64,
+                bInterval: 0,
+            }
+
+            +EndpointDescriptor {
+                bEndpointAddress: EP_ECHO_IN,
                 bmAttributes: usb::endpoint_attributes::transfer_type::BULK,
                 wMaxPacketSize: 64,
                 bInterval: 0,
