@@ -130,7 +130,7 @@ impl Usb {
             let setup = unsafe { (EP_MEMORY as *const [u8; 8]).read() };
 
             compiler_fence(Ordering::Release);
-            
+
             USB_DPRAM.ep_in_buffer_control(0).write(|w| w.set_pid(0, false));
             USB_DPRAM.ep_out_buffer_control(0).write(|w| w.set_pid(0, false));
             self.usb().ep_stall_arm().write(|w| {
@@ -159,10 +159,7 @@ impl UsbShared {
         self.rt
     }
 
-
-    pub fn configure_ep0(&self) {
-        
-    }
+    pub fn configure_ep0(&self) {}
 
     pub fn stall_ep0(&self) {
         USB_DPRAM.ep_in_buffer_control(0).write(|w| {
@@ -202,6 +199,8 @@ impl UsbShared {
     }
 
     /// Buffer address relative to start of DPRAM
+    ///
+    /// This is our arbitrary choice of fixed DPRAM allocation.
     fn buffer_address(&self, ep: u8) -> u16 {
         if ep & 0xF == 0 {
             0x100
@@ -214,13 +213,6 @@ impl UsbShared {
         self.ep_buffer_control(ep).write(|w| {
             w.set_pid(0, true);
         });
-        // if ep & EP_DIR_MASK == EP_IN {
-        // } else {
-        //     self.ep_buffer_control(ep).write(|w| {
-        //         w.set_pid(0, false);
-        //         w.set_length(0, 64);
-        //     });
-        // }
 
         self.ep_ctrl(ep).write(|w| {
             w.set_buffer_address(self.buffer_address(ep));
@@ -277,7 +269,7 @@ impl UsbShared {
 
             // Writing to start the transfer gives hardware control of the buffer
             compiler_fence(Ordering::Release);
-            
+
             pid = !pid;
             buffer_control.write(|w| {
                 w.set_pid(0, pid);
@@ -291,7 +283,7 @@ impl UsbShared {
                 w.set_full(0, true);
                 w.set_available(0, true);
             });
-            
+
             debug!("start IN to {:02x}: {} bytes DATA{}", ep, pkt.len(), pid as u8);
 
             NOTIFY_EP_IN.get(self.rt)[(ep & 0xF) as usize]
@@ -323,7 +315,7 @@ impl UsbShared {
         loop {
             // Writing to start the transfer gives hardware control of the buffer
             compiler_fence(Ordering::Release);
-            
+
             pid = !pid;
             buffer_control.write(|w| {
                 w.set_pid(0, pid);
@@ -335,7 +327,7 @@ impl UsbShared {
                 w.set_length(0, 64);
                 w.set_available(0, true);
             });
-            
+
             debug!("start OUT to {:02x}: DATA{}, {} bytes remaining", ep, pid as u8, slice.len());
 
             let pkt_len = NOTIFY_EP_OUT.get(self.rt)[(ep & 0xF) as usize]
@@ -376,7 +368,7 @@ impl UsbShared {
         debug_assert!(buffer_control.read().available(0) == false);
 
         compiler_fence(Ordering::Release);
-        
+
         pid = !pid;
         buffer_control.write(|w| {
             w.set_pid(0, pid);
@@ -388,7 +380,7 @@ impl UsbShared {
             w.set_length(0, 64);
             w.set_available(0, true);
         });
-        
+
         debug!("start OUT to {:02x}: DATA{}", ep, pid as u8);
 
         let len = NOTIFY_EP_OUT.get(self.rt)[(ep & 0xF) as usize]
@@ -417,14 +409,14 @@ impl Endpoint0 {
             self.usb.transfer_in(0x80, data.as_ptr(), data.len(), !is_full)
         }
     }
-    
+
     pub async fn ep0_transfer_out(&mut self) -> &[u8] {
         unsafe {
             let (buf, len) = self.usb.out_packet(0).await;
             slice::from_raw_parts(buf, len)
         }
     }
-    
+
     pub(crate) fn stall_ep0(&mut self) {
         self.usb.stall_ep0();
     }
@@ -441,22 +433,22 @@ static NOTIFY_EP_OUT: TaskOnly<[Interrupt; 8]> =
 fn USBCTRL_IRQ() {
     let flags = USB.ints().read();
 
-    let buf_status = USB.buff_status().read();
-    USB.buff_status().write_value(buf_status);
+    let buff_status = USB.buff_status().read();
+    USB.buff_status().write_value(buff_status);
 
-    defmt::trace!("usb irq: flags {:08x} buf_status {:08x}", flags.0, buf_status.0);
+    defmt::trace!("usb irq: flags {:08x} buf_status {:08x}", flags.0, buff_status.0);
 
     if flags.bus_reset() || flags.setup_req() {
         unsafe { NOTIFY_BUS_EVENT.get_unchecked().notify() };
     }
 
     for ep in 0..EP_COUNT {
-        if buf_status.ep_out(ep) {
+        if buff_status.ep_out(ep) {
             if ep > 0 { defmt::trace!("wake ep{} OUT", ep) };
             unsafe { NOTIFY_EP_OUT.get_unchecked()[ep as usize].notify() };
         }
 
-        if buf_status.ep_in(ep) {
+        if buff_status.ep_in(ep) {
             if ep > 0 { defmt::trace!("wake ep{} IN", ep) };
             unsafe { NOTIFY_EP_IN.get_unchecked()[ep as usize].notify() };
         }
