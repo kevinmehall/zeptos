@@ -8,7 +8,7 @@ Zeptos turns the ARM Cortex-M NVIC into an executor for async Rust. It runs enti
 
 The core scheduler should work on any ARM Cortex-M part. Zeptos additionally includes a USB stack and driver code for select peripherals on:
 
- * Raspberry Pi RP2040
+ * Raspberry Pi RP2040 and RP2350
  * Atmel / Microchip SAM D11 and SAM D21 series
 
 ## Why another async runtime?

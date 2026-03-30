@@ -15,7 +15,7 @@ cfg_select!{
     any(feature = "samd11", feature = "samd21") => {
         pub use crate::samd::usb::{ Usb, UsbShared, Endpoint0 };
     }
-    feature = "rp2040" => {
+    any(feature = "rp2040", feature = "rp2350") => {
         pub use crate::rp::usb::{ Usb, UsbShared, Endpoint0 };
     }
 }

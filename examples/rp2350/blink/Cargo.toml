@@ -1,0 +1,27 @@
+[package]
+name = "zeptos-demo"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+zeptos = { path = "../../../", features = ["rp2350", "time"] }
+panic-probe = "1.0"
+cortex-m-rt = "0.7.3"
+defmt = "1.0"
+defmt-rtt = "1.0"
+
+[dependencies.cortex-m]
+version = "0.7"
+features = ["critical-section-single-core", "inline-asm"]
+
+[profile.dev]
+incremental = false
+codegen-units = 1
+lto = true
+opt-level = "z"
+
+[profile.release]
+debug = true
+codegen-units = 1
+lto = true
+opt-level = "z"

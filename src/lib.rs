@@ -28,7 +28,7 @@ cfg_select! {
         pub mod samd;
         pub use samd::{serial_number::{serial_number, SERIAL_NUMBER_LEN}};
     }
-    any(feature="rp2040") => {
+    any(feature="rp2040", feature="rp2350") => {
         pub mod rp;
         pub use rp::{serial_number::{serial_number, SERIAL_NUMBER_LEN}};
     }
@@ -48,6 +48,7 @@ pub const CLOCK_HZ: u32 = cfg_select!{
         feature="samd-clock-48m-external-32k-xtal",
     ) => 48_000_000,
     feature="rp2040" => 125_000_000,
+    feature="rp2350" => 150_000_000,
 };
 
 /// Interface with the macro-generated code
@@ -67,7 +68,7 @@ pub mod internal {
             any(feature = "samd11", feature = "samd21") => {
                 crate::samd::init();
             }
-            any(feature = "rp2040") => {
+            any(feature = "rp2040", feature = "rp2350") => {
                 crate::rp::init();
             }
         }

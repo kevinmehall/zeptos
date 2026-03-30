@@ -1,4 +1,6 @@
-use rp_pac::{clocks::vals::{ClkAdcCtrlAuxsrc, ClkPeriCtrlAuxsrc, ClkRefCtrlSrc, ClkSysCtrlAuxsrc, ClkSysCtrlSrc, ClkUsbCtrlAuxsrc}, pll, resets::regs::Peripherals};
+use rp_pac::{clocks::vals::{ClkAdcCtrlAuxsrc, ClkPeriCtrlAuxsrc, ClkRefCtrlSrc, ClkSysCtrlAuxsrc, ClkSysCtrlSrc}, pll, resets::regs::Peripherals};
+#[allow(unused_imports)]
+use rp_pac::clocks::vals::ClkUsbCtrlAuxsrc;
 pub use rp_pac as pac;
 
 mod rp_reg;
@@ -6,16 +8,35 @@ pub use rp_reg::RpReg;
 
 pub mod gpio;
 
+#[cfg(feature = "rp2040")]
 pub mod rom_data;
+
+#[cfg(feature = "rp2040")]
 pub mod flash;
 
 #[cfg(feature="usb")]
 pub mod usb;
 
+#[cfg(all(feature = "rp2040", feature = "rp2040-boot2-w25q080"))]
+#[unsafe(link_section = ".boot2")]
+#[used]
+static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
+
+#[cfg(feature = "rp2350")]
+#[unsafe(link_section = ".boot_info")]
+#[used]
+static BOOT_BLOCK: [u32; 5] = [
+    0xffffded3, // PICOBIN_BLOCK_MARKER_START
+    0x10210142, // Executable, secure mode, Arm, RP2350
+    0x000001ff, // Last
+    0x00000000, // Relative pointer to close block loop
+    0xab123579, // PICOBIN_BLOCK_MARKER_END
+];
+
 const XOSC_HZ: u32 = 12_000_000;
 const XOSC_STARTUP_DELAY_MS: u32 = 1;
 
-const PLL_SYS_HZ: u32 = 125_000_000;
+const PLL_SYS_HZ: u32 = super::CLOCK_HZ;
 const PLL_USB_HZ: u32 = 48_000_000;
 
 pub const CLK_REF_HZ: u32 = XOSC_HZ;
@@ -24,13 +45,38 @@ pub const CLK_PERI_HZ: u32 = PLL_USB_HZ;
 
 pub(crate) fn init() {
     #![allow(unused_variables, unused_mut)]
-    
+
+    cfg_select! {
+        feature="rp2040" => {
+            fn set_clk_sys_src(src: ClkSysCtrlSrc) {
+                pac::CLOCKS.clk_sys_ctrl().modify(|w| w.set_src(src));
+                while pac::CLOCKS.clk_sys_selected().read() != 1 << src as u32 {}
+            }
+
+            fn set_clk_ref_src(src: ClkRefCtrlSrc) {
+                pac::CLOCKS.clk_ref_ctrl().modify(|w| w.set_src(src));
+                while pac::CLOCKS.clk_ref_selected().read() != 1 << src as u32 {}
+            }
+        }
+
+        feature="rp2350" => {
+            // rp-pac has a dedicated type for these registers on rp2350
+            fn set_clk_sys_src(src: ClkSysCtrlSrc) {
+                pac::CLOCKS.clk_sys_ctrl().modify(|w| w.set_src(src));
+                while pac::CLOCKS.clk_sys_selected().read().0 != 1 << src as u32 {}
+            }
+
+            fn set_clk_ref_src(src: ClkRefCtrlSrc) {
+                pac::CLOCKS.clk_ref_ctrl().modify(|w| w.set_src(src));
+                while pac::CLOCKS.clk_ref_selected().read().0 != 1 << src as u32 {}
+            }
+        }
+    }
+
     // Set clock to ROSC in case we're running from PLL before resetting it
     pac::CLOCKS.clk_sys_resus_ctrl().write_value(pac::clocks::regs::ClkSysResusCtrl(0));
-    pac::CLOCKS.clk_sys_ctrl().modify(|w| w.set_src(ClkSysCtrlSrc::CLK_REF));
-    while pac::CLOCKS.clk_sys_selected().read() != 1 << ClkSysCtrlSrc::CLK_REF as u32 {}
-    pac::CLOCKS.clk_ref_ctrl().modify(|w| w.set_src(ClkRefCtrlSrc::ROSC_CLKSRC_PH));
-    while pac::CLOCKS.clk_ref_selected().read() != 1 << ClkRefCtrlSrc::ROSC_CLKSRC_PH as u32 {}
+    set_clk_sys_src(ClkSysCtrlSrc::CLK_REF);
+    set_clk_ref_src(ClkRefCtrlSrc::ROSC_CLKSRC_PH);
 
     // Reset all peripherals (except those we need to keep executing code)
     let mut to_reset = Peripherals(0x01ff_ffff);
@@ -55,19 +101,18 @@ pub(crate) fn init() {
     while !pac::XOSC.status().read().stable() {}
 
     // Switch clk_ref to XOSC
-    pac::CLOCKS.clk_ref_ctrl().modify(|w| w.set_src(ClkRefCtrlSrc::XOSC_CLKSRC));
-    while pac::CLOCKS.clk_ref_selected().read() != 1 << ClkRefCtrlSrc::XOSC_CLKSRC as u32 {}
+    set_clk_ref_src(ClkRefCtrlSrc::XOSC_CLKSRC);
 
     // Enable PLLs
-    configure_pll(pac::PLL_SYS, const { PllConfig::validate(1, 125, 6, 2, PLL_SYS_HZ)});
+    configure_pll(pac::PLL_SYS, cfg_select! {
+        feature = "rp2040" => const { PllConfig::validate(1, 125, 6, 2, PLL_SYS_HZ) },
+        feature = "rp2350" => const { PllConfig::validate(1, 125, 5, 2, PLL_SYS_HZ) },
+    });
     configure_pll(pac::PLL_USB, const { PllConfig::validate(1, 100, 5, 5, PLL_USB_HZ)});
 
     // Switch clk_sys to pll_sys
-    pac::CLOCKS.clk_sys_ctrl().write(|w| {
-        w.set_auxsrc(ClkSysCtrlAuxsrc::CLKSRC_PLL_SYS);
-        w.set_src(ClkSysCtrlSrc::CLKSRC_CLK_SYS_AUX);
-    });
-    while pac::CLOCKS.clk_sys_selected().read() != 1 << ClkSysCtrlSrc::CLKSRC_CLK_SYS_AUX as u32 {}
+    pac::CLOCKS.clk_sys_ctrl().modify(|w| w.set_auxsrc(ClkSysCtrlAuxsrc::CLKSRC_PLL_SYS));
+    set_clk_sys_src(ClkSysCtrlSrc::CLKSRC_CLK_SYS_AUX);
 
     // Enable clk_peri
     pac::CLOCKS.clk_peri_ctrl().write(|w| {
@@ -104,6 +149,7 @@ pub(crate) fn init() {
     pac::RESETS.reset().write_value_clear(enable);
     while ((!pac::RESETS.reset_done().read().0) & enable.0) != 0 {}
 
+    #[cfg(feature = "rp2040")]
     unsafe {
         // SAFETY: interrupts are disabled on init and core 1 is halted
         flash::flash_unique_id(&mut * &raw mut serial_number::FLASH_UID, true);
@@ -160,20 +206,34 @@ fn configure_pll(p: pac::pll::Pll, config: PllConfig) {
     p.pwr().write_value(pwr);
 }
 
-#[cfg(feature = "rp2040-boot2-w25q080")]
-#[unsafe(link_section = ".boot2")]
-#[used]
-static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
-
 
 pub(crate) mod serial_number {
     /// Length of the array returned by `serial_number()`.
     pub const SERIAL_NUMBER_LEN: usize = 8;
-    
-    pub(crate) static mut FLASH_UID: [u8; 8] = [0; SERIAL_NUMBER_LEN];
-    
-    /// Get the unique ID of the flash device.
-    pub fn serial_number() -> [u8; SERIAL_NUMBER_LEN] {
-        unsafe { * &raw const FLASH_UID }
+
+    cfg_select! {
+        feature = "rp2040" => {
+            pub(crate) static mut FLASH_UID: [u8; 8] = [0; SERIAL_NUMBER_LEN];
+
+            /// Get the unique ID of the flash device.
+            pub fn serial_number() -> [u8; SERIAL_NUMBER_LEN] {
+                // SAFETY: This is initialized at boot and not written thereafter
+                unsafe { * &raw const FLASH_UID }
+            }
+        }
+        feature = "rp2350" => {
+            pub fn serial_number() -> [u8; SERIAL_NUMBER_LEN] {
+                // Big-endian order to match boot ROM USB serial
+                let otp = rp_pac::OTP_DATA;
+                let data = [
+                    otp.chipid3().read().to_be_bytes(),
+                    otp.chipid2().read().to_be_bytes(),
+                    otp.chipid1().read().to_be_bytes(),
+                    otp.chipid0().read().to_be_bytes(),
+                ];
+                // Safety: Memory layout of [[u8; 2]; 4] and [u8; 8] guaranteed compatible
+                unsafe { core::mem::transmute(data) }
+            }
+        }
     }
 }

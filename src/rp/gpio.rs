@@ -40,7 +40,7 @@ impl IoPin {
     }
 
     #[inline]
-    fn pads(&self) -> Reg<rp_pac::pads::regs::GpioCtrl, RW> {
+    fn pad(&self) -> Reg<rp_pac::pads::regs::GpioCtrl, RW> {
         if self.pin <= 31 {
             crate::rp::pac::PADS_BANK0.gpio(self.pin_in_bank())
         } else {
@@ -61,6 +61,11 @@ impl IoPin {
     pub fn set_function(&self, func: Function) {
         self.io().gpio(self.pin_in_bank()).ctrl().write(|w| {
             w.set_funcsel(func as u8);
+        });
+
+        #[cfg(feature = "rp2350")]
+        self.pad().write(|w| {
+            w.set_iso(false);
         });
     }
 
@@ -111,7 +116,7 @@ impl IoPin {
 pub trait TypePin {
     const DYN: IoPin;
 
-    
+
     #[inline]
     fn set_function(func: Function) {
         Self::DYN.set_function(func)
@@ -202,4 +207,3 @@ pins! {
     GPIO29 = 29,
     GPIO30 = 30,
 }
-

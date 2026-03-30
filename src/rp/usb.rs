@@ -79,6 +79,8 @@ impl Usb {
 
         usb.main_ctrl().write(|w| {
             w.set_controller_en(true);
+            #[cfg(feature = "rp2350")]
+            w.set_phy_iso(false);
         });
 
         usb.sie_ctrl().write(|w| {

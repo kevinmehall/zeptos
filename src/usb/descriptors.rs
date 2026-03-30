@@ -32,7 +32,7 @@ macro_rules! descriptors {
             assert!(desc.len() == Desc::LEN);
 
             let mut bytes = [0u8; LEN];
-            
+
             let (mut first, mut rest) = bytes.split_at_mut(desc.len());
             first.copy_from_slice(&desc);
 
