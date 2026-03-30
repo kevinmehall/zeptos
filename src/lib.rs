@@ -1,13 +1,13 @@
 //! A tiny runtime for async Rust on microcontrollers.
-//! 
+//!
 //! The functionality of this crate is enabled by Cargo features:
-//! 
+//!
 //! * `samd11` or `samd21`: Support for the SAM D11 or D21 microcontrollers.
 //!     * `samd-clock-48m-usb`, `samd-clock-48m-internal`, `samd-clock-48m-external-32k-osc`, or `samd-clock-48m-external-32k-xtal`: Configure the clock source
 //! * `rp2040`: Support for the Raspberry Pi RP2040 microcontroller.
 //!    * `rp2040-boot2-w25q080`
 //!    * `rom-func-cache`
-//! 
+//!
 //! * `usb`: Enables USB support.
 //! * `time`: Enables systick timer.
 #![no_std]
@@ -23,17 +23,16 @@ pub use executor::{Interrupt, TaskOnly};
 
 mod cortex_m;
 
-#[cfg(any(feature="samd11", feature="samd21"))]
-pub mod samd;
-
-#[cfg(any(feature="samd11", feature="samd21"))]
-pub use samd::{serial_number::{serial_number, SERIAL_NUMBER_LEN}};
-
-#[cfg(any(feature="rp2040"))]
-pub mod rp;
-
-#[cfg(any(feature="rp2040"))]
-pub use rp::{serial_number::{serial_number, SERIAL_NUMBER_LEN}};
+cfg_select! {
+    any(feature="samd11", feature="samd21") => {
+        pub mod samd;
+        pub use samd::{serial_number::{serial_number, SERIAL_NUMBER_LEN}};
+    }
+    any(feature="rp2040") => {
+        pub mod rp;
+        pub use rp::{serial_number::{serial_number, SERIAL_NUMBER_LEN}};
+    }
+}
 
 #[cfg(feature="time")]
 pub mod time;
@@ -41,16 +40,15 @@ pub mod time;
 #[cfg(any(feature="usb"))]
 pub mod usb;
 
-#[cfg(any(
-    feature="samd-clock-48m-usb",
-    feature="samd-clock-48m-internal",
-    feature="samd-clock-48m-external-32k-osc",
-    feature="samd-clock-48m-external-32k-xtal",
-))]
-pub const CLOCK_HZ: u32 = 48_000_000;
-
-#[cfg(feature="rp2040")]
-pub const CLOCK_HZ: u32 = 125_000_000;
+pub const CLOCK_HZ: u32 = cfg_select!{
+    any(
+        feature="samd-clock-48m-usb",
+        feature="samd-clock-48m-internal",
+        feature="samd-clock-48m-external-32k-osc",
+        feature="samd-clock-48m-external-32k-xtal",
+    ) => 48_000_000,
+    feature="rp2040" => 125_000_000,
+};
 
 /// Interface with the macro-generated code
 #[doc(hidden)]
@@ -65,15 +63,18 @@ pub mod internal {
 
         cortex_m::interrupt::disable();
 
-        #[cfg(any(feature = "samd11", feature = "samd21"))]
-        crate::samd::init();
-
-        #[cfg(any(feature = "rp2040"))]
-        crate::rp::init();
+        cfg_select! {
+            any(feature = "samd11", feature = "samd21") => {
+                crate::samd::init();
+            }
+            any(feature = "rp2040") => {
+                crate::rp::init();
+            }
+        }
 
         #[cfg(feature = "time")]
         crate::time::init();
-        
+
         Hardware {
             #[cfg(all(feature = "usb"))]
             usb: unsafe { crate::usb::Usb::new(rt) },
@@ -101,7 +102,7 @@ pub struct Runtime {
 
 impl Runtime {
     /// Create a new `Runtime` token by assuming that we are running on the task thread.
-    /// 
+    ///
     /// ## Safety
     /// Can only be called from inside a task, and not
     /// on another core or at a higher interrupt priority.
@@ -113,7 +114,7 @@ impl Runtime {
 }
 
 /// Exclusive access to peripherals passed to the main task.
-/// 
+///
 /// The fields in this struct depend on the cargo features enabled.
 pub struct Hardware {
     #[cfg(feature = "usb")]

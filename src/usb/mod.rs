@@ -1,5 +1,5 @@
 use core::{
-    cell::Cell, convert::Infallible, future::Future, marker::PhantomData, ops::{Deref, DerefMut}, pin::{pin, Pin}, task::{Context, Poll}
+    cell::Cell, convert::Infallible, future::Future, marker::PhantomData, ops::{Deref, DerefMut}, pin::Pin, task::{Context, Poll}
 };
 
 use defmt::{debug, error, panic, write, Format};
@@ -11,11 +11,14 @@ use descriptors::DescriptorBuilder;
 
 use crate::executor::TaskOnly;
 
-#[cfg(any(feature = "samd11", feature = "samd21"))]
-pub use crate::samd::usb::{ Usb, UsbShared, Endpoint0 };
-
-#[cfg(any(feature = "rp2040"))]
-pub use crate::rp::usb::{ Usb, UsbShared, Endpoint0 };
+cfg_select!{
+    any(feature = "samd11", feature = "samd21") => {
+        pub use crate::samd::usb::{ Usb, UsbShared, Endpoint0 };
+    }
+    feature = "rp2040" => {
+        pub use crate::rp::usb::{ Usb, UsbShared, Endpoint0 };
+    }
+}
 
 #[repr(C, align(4))]
 pub struct UsbBuffer<const SIZE: usize>([u8; SIZE]);
@@ -405,7 +408,7 @@ impl Usb {
 
         impl<'a, H: Handler> Future for Fut<'a, H> {
             type Output = Infallible;
-        
+
             fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
                 let mut this = self.project();
                 match this.usb.poll_event(cx) {
