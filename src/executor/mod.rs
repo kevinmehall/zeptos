@@ -9,7 +9,32 @@ pub use interrupt::{Interrupt, TaskOnly};
 mod runqueue;
 pub use runqueue::{RunQueue, RunQueueNode};
 
+use crate::Runtime;
+
 static RUN_QUEUE: RunQueue = RunQueue::new();
+
+/// A handle to wake a task, obtained from `task_ref()` on a task's unique type.
+///
+/// This is effectively a more efficient `Waker`.
+pub struct TaskRef {
+    rt: Runtime,
+    node: &'static RunQueueNode,
+}
+
+impl TaskRef {
+    #[doc(hidden)]
+    /// Called from #[task] macro
+    pub fn new(rt: Runtime, node: &'static RunQueueNode) -> Self {
+        Self { rt, node }
+    }
+
+    /// Wake the task.
+    pub fn wake(&self) {
+        let _ = self.rt;
+        RUN_QUEUE.enqueue(self.node);
+        SCB::set_pendsv();
+    }
+}
 
 /// Trait for a ZST that represents a task
 pub trait Task: Sized + 'static {
@@ -125,5 +150,3 @@ fn PendSV() {
         RUN_QUEUE.run_all()
     }
 }
-
-

@@ -19,7 +19,7 @@ pub use zeptos_macros::main_cortex_m as main;
 pub use zeptos_macros::task;
 
 mod executor;
-pub use executor::{Interrupt, TaskOnly};
+pub use executor::{Interrupt, TaskOnly, TaskRef};
 
 mod cortex_m;
 

@@ -111,7 +111,9 @@ pub fn run(args: &[NestedMeta], f: syn::ItemFn) -> Result<TokenStream, TokenStre
 
         #[allow(non_camel_case_types)]
         #[derive(Clone, Copy)]
-        struct #task_handle_ty {}
+        struct #task_handle_ty {
+            rt: ::zeptos::Runtime,
+        }
 
         impl #task_handle_ty {
             pub fn spawn(self, #fargs) {
@@ -131,6 +133,14 @@ pub fn run(args: &[NestedMeta], f: syn::ItemFn) -> Result<TokenStream, TokenStre
                 unsafe {
                     <Self as ::zeptos::internal::Task>::storage().is_running()
                 }
+            }
+
+            pub fn task_ref(self) -> ::zeptos::TaskRef {
+                ::zeptos::TaskRef::new(self.rt, <Self as ::zeptos::internal::Task>::node())
+            }
+
+            pub fn wake(self) {
+                self.task_ref().wake();
             }
         }
 
@@ -154,8 +164,8 @@ pub fn run(args: &[NestedMeta], f: syn::ItemFn) -> Result<TokenStream, TokenStre
             }
         }
 
-        #visibility fn #task_ident(s: ::zeptos::Runtime) -> #task_handle_ty {
-            #task_handle_ty { }
+        #visibility fn #task_ident(rt: ::zeptos::Runtime) -> #task_handle_ty {
+            #task_handle_ty { rt }
         }
     };
 
