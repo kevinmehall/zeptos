@@ -21,7 +21,7 @@ cfg_select!{
 }
 
 #[repr(C, align(4))]
-pub struct UsbBuffer<const SIZE: usize>([u8; SIZE]);
+pub struct UsbBuffer<const SIZE: usize>(pub [u8; SIZE]);
 
 impl<const SIZE: usize> UsbBuffer<SIZE> {
     pub const fn new() -> Self {

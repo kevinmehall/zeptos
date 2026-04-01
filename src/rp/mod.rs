@@ -1,3 +1,5 @@
+#[cfg(feature = "gpio-interrupts")]
+use rp_pac::Interrupt;
 use rp_pac::{clocks::vals::{ClkAdcCtrlAuxsrc, ClkPeriCtrlAuxsrc, ClkRefCtrlSrc, ClkSysCtrlAuxsrc, ClkSysCtrlSrc}, pll, resets::regs::Peripherals};
 #[allow(unused_imports)]
 use rp_pac::clocks::vals::ClkUsbCtrlAuxsrc;
@@ -153,6 +155,12 @@ pub(crate) fn init() {
     unsafe {
         // SAFETY: interrupts are disabled on init and core 1 is halted
         flash::flash_unique_id(&mut * &raw mut serial_number::FLASH_UID, true);
+    }
+
+    #[allow(unused_unsafe)]
+    unsafe {
+        #[cfg(feature = "gpio-interrupts")]
+        cortex_m::peripheral::NVIC::unmask(Interrupt::IO_IRQ_BANK0);
     }
 }
 

@@ -1,4 +1,9 @@
-use rp_pac::{common::{Reg, RW}, io::Io, SIO};
+#[cfg(feature = "gpio-interrupts")]
+use rp_pac::interrupt;
+use rp_pac::{SIO, common::{RW, Reg}, io::Io};
+
+#[allow(unused_imports)]
+use crate::{Interrupt, Runtime, TaskOnly, rp::RpReg};
 
 pub trait PinFunc {
     const DYN: Function;
@@ -28,11 +33,11 @@ pub struct IoPin {
 
 impl IoPin {
     fn bank(&self) -> usize {
-        (self.pin >> 5) as usize
+        0
     }
 
     fn pin_in_bank(&self) -> usize {
-        (self.pin & 0x1f) as usize
+        self.pin as usize
     }
 
     fn mask(&self) -> u32 {
@@ -41,20 +46,12 @@ impl IoPin {
 
     #[inline]
     fn pad(&self) -> Reg<rp_pac::pads::regs::GpioCtrl, RW> {
-        if self.pin <= 31 {
-            crate::rp::pac::PADS_BANK0.gpio(self.pin_in_bank())
-        } else {
-            crate::rp::pac::PADS_QSPI.gpio(self.pin_in_bank())
-        }
+        crate::rp::pac::PADS_BANK0.gpio(self.pin_in_bank())
     }
 
     #[inline]
     fn io(&self) -> Io {
-        if self.pin <= 31 {
-            crate::rp::pac::IO_BANK0
-        } else {
-            crate::rp::pac::IO_QSPI
-        }
+        crate::rp::pac::IO_BANK0
     }
 
     #[inline]
@@ -63,9 +60,10 @@ impl IoPin {
             w.set_funcsel(func as u8);
         });
 
-        #[cfg(feature = "rp2350")]
         self.pad().write(|w| {
+            #[cfg(feature = "rp2350")]
             w.set_iso(false);
+            w.set_ie(true);
         });
     }
 
@@ -73,6 +71,17 @@ impl IoPin {
     pub fn disable(&self) {
         self.io().gpio(self.pin_in_bank()).ctrl().write(|w| {
             w.set_funcsel(31);
+        });
+    }
+
+    #[inline]
+    pub fn configure_pad(&self, pull_up: bool, pull_down: bool) {
+        self.pad().write(|w| {
+            #[cfg(feature = "rp2350")]
+            w.set_iso(false);
+            w.set_ie(true);
+            w.set_pue(pull_up);
+            w.set_pde(pull_down);
         });
     }
 
@@ -110,12 +119,43 @@ impl IoPin {
     pub fn out_clr(&self) {
         SIO.gpio_out(self.bank()).value_clr().write_value(self.mask())
     }
+
+    #[cfg(feature = "gpio-interrupts")]
+    pub async fn wait(&self, rt: Runtime, mask: EventMask) -> EventMask {
+        let int = &INT.get(rt)[self.pin as usize];
+        let reg = self.pin_in_bank() / 8;
+        let offset = (self.pin_in_bank() % 8) * 4;
+
+        // Clear any interrupts that are already pending
+        self.io().intr(reg).write(|w| {
+            w.0 = 0x0f << offset;
+        });
+
+        int.until(||{
+            let events = EventMask(((self.io().intr(reg).read().0 >> offset) & 0x0f) as u8);
+            defmt::debug!("polling gpio{} events: {:b}", self.pin, events.0);
+            if events.contains(mask) {
+                Some(events)
+            } else {
+                // Enable requested interrupts
+                self.io().int_proc(0).inte(reg).write_set(|w| {
+                    w.0 = (mask.0 as u32) << offset;
+                });
+                None
+            }
+        }).await
+    }
+
+    #[inline]
+    #[cfg(feature = "gpio-interrupts")]
+    pub async fn wait_level(&self, rt: Runtime, high: bool) {
+        self.wait(rt, if high { EventMask::HIGH } else { EventMask::LOW }).await;
+    }
 }
 
 /// Type-level pin
 pub trait TypePin {
     const DYN: IoPin;
-
 
     #[inline]
     fn set_function(func: Function) {
@@ -205,5 +245,59 @@ pins! {
     GPIO27 = 27,
     GPIO28 = 28,
     GPIO29 = 29,
-    GPIO30 = 30,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct EventMask(u8);
+
+impl EventMask {
+    pub const NONE: Self = Self(0);
+    pub const LOW: Self = Self(1);
+    pub const HIGH: Self = Self(2);
+    pub const FALLING: Self = Self(4);
+    pub const RISING: Self = Self(8);
+}
+
+impl EventMask {
+    pub fn contains(&self, other: Self) -> bool {
+        (self.0 & other.0) == other.0
+    }
+
+    pub fn any(&self) -> bool {
+        self.0 != 0
+    }
+}
+
+impl core::ops::BitOr for EventMask {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self {
+        Self(self.0 | rhs.0)
+    }
+}
+
+#[cfg(feature = "gpio-interrupts")]
+static INT: TaskOnly<[Interrupt; 29]> = unsafe { TaskOnly::new([const { Interrupt::new() }; _]) };
+
+#[cfg(feature = "gpio-interrupts")]
+#[interrupt]
+fn IO_IRQ_BANK0() {
+    let io = crate::rp::pac::IO_BANK0;
+    let wakers = unsafe { INT.get_unchecked() };
+    let int_proc = io.int_proc(0);
+
+    for reg in 0..4 {
+        let status = int_proc.ints(reg).read();
+
+        for offset in 0..8 {
+            let gpio = reg * 8 + offset;
+            if (status.0 >> (offset * 4)) & 0xf != 0 {
+                defmt::debug!("GPIO interrupt on pin {}: {:b}", gpio, 0xf & (status.0 >> (offset * 4)));
+                int_proc.inte(reg).write_clear(|w| {
+                    w.0 = 0xf << offset
+                });
+                unsafe { if let Some(w) = wakers.get(gpio) { w.notify() } }
+            }
+        }
+    }
 }

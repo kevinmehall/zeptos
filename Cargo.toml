@@ -42,3 +42,4 @@ rom-func-cache = []
 
 usb = []
 time = []
+gpio-interrupts = []
