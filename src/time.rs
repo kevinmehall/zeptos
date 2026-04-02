@@ -44,7 +44,7 @@ impl Runtime {
     }
 }
 
-static HEAD: TaskOnly<Cell<Option<NonNull<Wait>>>> = unsafe { TaskOnly::new(Cell::new(None)) };
+static HEAD: TaskOnly<Cell<Option<NonNull<Wait>>>> = unsafe { TaskOnly::new_unsend(Cell::new(None)) };
 
 #[must_use]
 pub struct Wait {

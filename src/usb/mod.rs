@@ -464,8 +464,7 @@ pub struct Endpoints {
     usb: UsbShared,
 }
 
-static EP_ENABLED: TaskOnly<Cell<u32>> =
-    unsafe { TaskOnly::new(Cell::new(ep_enabled_mask(0 | EP_OUT) | ep_enabled_mask(0 | EP_IN))) };
+static EP_ENABLED: TaskOnly<Cell<u32>> = TaskOnly::new(Cell::new(ep_enabled_mask(0 | EP_OUT) | ep_enabled_mask(0 | EP_IN)));
 
 const fn ep_enabled_mask(ep: u8) -> u32 {
     let bit = ((ep & 0x0f) << 1) | (ep >> 7);

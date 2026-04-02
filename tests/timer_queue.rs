@@ -6,7 +6,7 @@ pub struct Runtime;
 
 pub struct TaskOnly<T>(T);
 impl<T> TaskOnly<T> {
-    pub const fn new(value: T) -> Self {
+    pub const unsafe fn new_unsend(value: T) -> Self {
         TaskOnly(value)
     }
     pub fn get(&self, _rt: Runtime) -> &T {

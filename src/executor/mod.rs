@@ -1,13 +1,16 @@
+use core::{cell::{Cell, UnsafeCell}, future::Future, mem::{ManuallyDrop, MaybeUninit}, pin::Pin, ptr::drop_in_place, task::{Context, Poll, RawWaker, RawWakerVTable, Waker}};
+
 use cortex_m_rt::exception;
 use cortex_m::peripheral::SCB;
 
 mod interrupt;
-use core::{cell::{Cell, UnsafeCell}, future::Future, mem::{ManuallyDrop, MaybeUninit}, pin::Pin, ptr::drop_in_place, task::{Context, Poll, RawWaker, RawWakerVTable, Waker}};
-
-pub use interrupt::{Interrupt, TaskOnly};
+pub use interrupt::Interrupt;
 
 mod runqueue;
 pub use runqueue::{RunQueue, RunQueueNode};
+
+mod task_only;
+pub use task_only::TaskOnly;
 
 use crate::Runtime;
 

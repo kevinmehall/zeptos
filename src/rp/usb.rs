@@ -424,12 +424,10 @@ impl Endpoint0 {
     }
 }
 
-static NOTIFY_BUS_EVENT: TaskOnly<Interrupt> = unsafe { TaskOnly::new(Interrupt::new()) };
+static NOTIFY_BUS_EVENT: TaskOnly<Interrupt> = TaskOnly::new(Interrupt::new());
 
-static NOTIFY_EP_IN: TaskOnly<[Interrupt; 8]> =
-    unsafe { TaskOnly::new([const { Interrupt::new() }; 8]) };
-static NOTIFY_EP_OUT: TaskOnly<[Interrupt; 8]> =
-    unsafe { TaskOnly::new([const { Interrupt::new() }; 8]) };
+static NOTIFY_EP_IN: TaskOnly<[Interrupt; 8]> = TaskOnly::new([const { Interrupt::new() }; 8]);
+static NOTIFY_EP_OUT: TaskOnly<[Interrupt; 8]> = TaskOnly::new([const { Interrupt::new() }; 8]);
 
 #[interrupt]
 fn USBCTRL_IRQ() {

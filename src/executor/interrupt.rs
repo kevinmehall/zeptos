@@ -5,7 +5,6 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
-use crate::Runtime;
 use super::RunQueueNode;
 
 /// Event handling primitive for waiting for an interrupt.
@@ -84,67 +83,4 @@ impl<F: Fn() -> R, R: UntilOutput> Future for Until<'_, F> {
             Poll::Pending
         }
     }
-}
-
-/// Wrapper for placing a value that is not Send + Sync in a `static` but only
-/// allowing it to be accessed from a task.
-#[repr(transparent)]
-pub struct TaskOnly<T>(T);
-
-impl<T> TaskOnly<T> {
-    /// Wrap a value.
-    ///
-    /// SAFETY: This is the equivalent of sending T to the
-    /// task thread. You must either be on the task thread
-    /// or T must be Send.
-    pub const unsafe fn new(v: T) -> Self {
-        TaskOnly(v)
-    }
-
-    /// Get the wrapped value.
-    ///
-    /// SAFETY: must only be called from inside a task,
-    /// and not another core or an ISR at higher privilige.
-    pub const unsafe fn get_unchecked(&self) -> &T {
-        &self.0
-    }
-
-    /// Get the wrapped value.
-    pub const fn get(&self, _runtime: Runtime) -> &T {
-        unsafe { self.get_unchecked() }
-    }
-}
-
-unsafe impl<T> Send for TaskOnly<T> {}
-unsafe impl<T> Sync for TaskOnly<T> {}
-
-#[macro_export]
-macro_rules! isr {
-    ($attr:ident, $name:ident) => {{
-        use ::cortex_m_rt::$attr;
-
-        static I: $crate::executor::TaskOnly<$crate::executor::Interrupt> =
-            unsafe { $crate::executor::TaskOnly::new($crate::executor::Interrupt::new()) };
-
-        #[$attr]
-        fn $name() {
-            unsafe { I.get().notify() }
-        }
-
-        unsafe { I.get() }
-    }};
-}
-
-#[macro_export]
-macro_rules! interrupt {
-    ($name:ident) => {
-        $crate::isr!(interrupt, $name)
-    };
-}
-
-#[macro_export]
-macro_rules! exception {
-    ($name:ident) => {
-        $crate::isr!(exception, $name)
-    };
 }

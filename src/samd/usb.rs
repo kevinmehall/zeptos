@@ -268,7 +268,7 @@ impl UsbShared {
         let ptr = &raw mut CONTROL_BUF as *mut u8;
         self.ep_ram(0).prepare_out(PacketSize::Size64, ptr, 64);
         let ep_reg = self.ep(0);
-        
+
         ep_reg.epcfg.write(|w| {
             w.eptype0().variant(1);
             w.eptype1().variant(1)
@@ -425,7 +425,7 @@ impl Endpoint0 {
             data = remaining;
         }
     }
-    
+
     pub async fn ep0_transfer_out(&mut self) -> &[u8] {
         let buf = unsafe { &mut * &raw mut CONTROL_BUF };
 
@@ -435,18 +435,15 @@ impl Endpoint0 {
 
         &**buf
     }
-    
+
     pub(crate) fn stall_ep0(&mut self) {
         self.usb.stall_ep0();
     }
 }
 
-static NOTIFY_BUS_EVENT: TaskOnly<Interrupt> = unsafe { TaskOnly::new(Interrupt::new()) };
-
-static NOTIFY_EP_IN: TaskOnly<[Interrupt; 8]> =
-    unsafe { TaskOnly::new([const { Interrupt::new() }; 8]) };
-static NOTIFY_EP_OUT: TaskOnly<[Interrupt; 8]> =
-    unsafe { TaskOnly::new([const { Interrupt::new() }; 8]) };
+static NOTIFY_BUS_EVENT: TaskOnly<Interrupt> = TaskOnly::new(Interrupt::new());
+static NOTIFY_EP_IN: TaskOnly<[Interrupt; 8]> = TaskOnly::new([const { Interrupt::new() }; 8]);
+static NOTIFY_EP_OUT: TaskOnly<[Interrupt; 8]> = TaskOnly::new([const { Interrupt::new() }; 8]);
 
 #[interrupt]
 fn USB() {
