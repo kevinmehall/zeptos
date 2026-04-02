@@ -2,6 +2,8 @@
 use rp_pac::interrupt;
 use rp_pac::{SIO, common::{RW, Reg}, io::Io};
 
+#[cfg(feature = "gpio-interrupts")]
+use crate::InterruptList;
 #[allow(unused_imports)]
 use crate::{Interrupt, Runtime, TaskOnly, rp::RpReg};
 
@@ -32,6 +34,12 @@ pub struct IoPin {
 }
 
 impl IoPin {
+    #[inline]
+    pub fn bank0(pin: u8) -> Self {
+        assert!(pin < 30);
+        Self { pin }
+    }
+
     fn bank(&self) -> usize {
         0
     }
@@ -120,16 +128,40 @@ impl IoPin {
         SIO.gpio_out(self.bank()).value_clr().write_value(self.mask())
     }
 
-    #[cfg(feature = "gpio-interrupts")]
-    pub async fn wait(&self, rt: Runtime, mask: EventMask) -> EventMask {
-        let int = &INT.get(rt)[self.pin as usize];
+    /// Get interrupt flags that are pending (even if not enabled)
+    #[inline]
+    pub fn interrupt_status(&self) -> EventMask {
         let reg = self.pin_in_bank() / 8;
         let offset = (self.pin_in_bank() % 8) * 4;
+        EventMask(((self.io().intr(reg).read().0 >> offset) & 0x0f) as u8)
+    }
 
-        // Clear any interrupts that are already pending
+    /// Enable interrupts to fire once.
+    ///
+    /// This is a low-level call that does not wait for the interrupt.
+    #[inline]
+    pub fn enable_interrupts(&self, mask: EventMask) {
+        let reg = self.pin_in_bank() / 8;
+        let offset = (self.pin_in_bank() % 8) * 4;
+        self.io().int_proc(0).inte(reg).write_set(|w| {
+            w.0 = (mask.0 as u32) << offset;
+        });
+    }
+
+    /// Clear any pending edge interrupts
+    pub fn clear_interrupts(&self) {
+        let reg = self.pin_in_bank() / 8;
+        let offset = (self.pin_in_bank() % 8) * 4;
         self.io().intr(reg).write(|w| {
             w.0 = 0x0f << offset;
         });
+    }
+
+    #[cfg(feature = "gpio-interrupts")]
+    pub async fn wait(&self, rt: Runtime, mask: EventMask) -> EventMask {
+        let int = BANK0_INT.get_pinned(rt);
+        let reg = self.pin_in_bank() / 8;
+        let offset = (self.pin_in_bank() % 8) * 4;
 
         int.until(||{
             let events = EventMask(((self.io().intr(reg).read().0 >> offset) & 0x0f) as u8);
@@ -266,6 +298,10 @@ impl EventMask {
     pub fn any(&self) -> bool {
         self.0 != 0
     }
+
+    pub fn bits(&self) -> u8 {
+        self.0
+    }
 }
 
 impl core::ops::BitOr for EventMask {
@@ -277,27 +313,22 @@ impl core::ops::BitOr for EventMask {
 }
 
 #[cfg(feature = "gpio-interrupts")]
-static INT: TaskOnly<[Interrupt; 29]> = unsafe { TaskOnly::new([const { Interrupt::new() }; _]) };
+pub static BANK0_INT: TaskOnly<InterruptList> = unsafe { TaskOnly::new_unsend(InterruptList::new()) };
 
 #[cfg(feature = "gpio-interrupts")]
 #[interrupt]
 fn IO_IRQ_BANK0() {
     let io = crate::rp::pac::IO_BANK0;
-    let wakers = unsafe { INT.get_unchecked() };
+    let wakers = unsafe { BANK0_INT.get_unchecked() };
+
+    // Disable all interrupts before notifying tasks so a task can re-enable any it's still interested in
     let int_proc = io.int_proc(0);
-
     for reg in 0..4 {
-        let status = int_proc.ints(reg).read();
-
-        for offset in 0..8 {
-            let gpio = reg * 8 + offset;
-            if (status.0 >> (offset * 4)) & 0xf != 0 {
-                defmt::debug!("GPIO interrupt on pin {}: {:b}", gpio, 0xf & (status.0 >> (offset * 4)));
-                int_proc.inte(reg).write_clear(|w| {
-                    w.0 = 0xf << offset
-                });
-                unsafe { if let Some(w) = wakers.get(gpio) { w.notify() } }
-            }
-        }
+        int_proc.inte(reg).write_clear(|w| {
+            w.0 = !0;
+        });
     }
+
+    // SAFETY: This is an ISR at task priority
+    unsafe { wakers.notify_all(); }
 }

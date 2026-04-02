@@ -7,7 +7,7 @@ use core::{
 
 use super::RunQueueNode;
 
-/// Event handling primitive for waiting for an interrupt.
+/// Event handling primitive for one task to wait for an interrupt.
 ///
 /// This is normally placed in a `static`. An ISR can call `notify` to
 /// wake the task that is waiting on the future returned by `until`.

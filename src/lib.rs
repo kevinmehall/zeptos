@@ -15,11 +15,15 @@
 
 use core::marker::PhantomData;
 
+// Modules use via this re-export so it can be turned off when building for host in test.
+#[allow(unused_imports)]
+use defmt::{panic, assert, debug_assert};
+
 pub use zeptos_macros::main_cortex_m as main;
 pub use zeptos_macros::task;
 
 mod executor;
-pub use executor::{Interrupt, TaskOnly, TaskRef};
+pub use executor::{Interrupt, InterruptList, TaskOnly, TaskRef};
 
 mod cortex_m;
 

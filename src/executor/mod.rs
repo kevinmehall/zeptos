@@ -4,7 +4,10 @@ use cortex_m_rt::exception;
 use cortex_m::peripheral::SCB;
 
 mod interrupt;
-pub use interrupt::Interrupt;
+pub use interrupt::{ Interrupt, UntilOutput };
+
+mod interrupt_list;
+pub use interrupt_list::InterruptList;
 
 mod runqueue;
 pub use runqueue::{RunQueue, RunQueueNode};

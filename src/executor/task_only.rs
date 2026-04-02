@@ -1,3 +1,5 @@
+use core::pin::Pin;
+
 use crate::Runtime;
 
 /// Wrapper for placing a value that is not Send + Sync in a `static` but only
@@ -31,6 +33,11 @@ impl<T> TaskOnly<T> {
     /// Get the wrapped value.
     pub const fn get(&self, _runtime: Runtime) -> &T {
         unsafe { self.get_unchecked() }
+    }
+
+    /// Get a pinned reference to the wrapped value.
+    pub const fn get_pinned(&'static self, _runtime: Runtime) -> Pin<&'static T> {
+        unsafe { Pin::new_unchecked(self.get_unchecked()) }
     }
 }
 
