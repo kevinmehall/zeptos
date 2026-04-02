@@ -38,6 +38,9 @@ cfg_select! {
 #[cfg(feature="time")]
 pub mod time;
 
+#[cfg(feature="time")]
+use cortex_m::systick as timer_hw;
+
 #[cfg(any(feature="usb"))]
 pub mod usb;
 

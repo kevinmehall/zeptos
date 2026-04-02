@@ -2,23 +2,21 @@ use core::{cell::Cell, marker::PhantomPinned, pin::Pin, ptr::NonNull, task::{Con
 
 use defmt::Format;
 
-use crate::{executor::{Interrupt, TaskOnly}, Runtime};
-
-use super::cortex_m::systick::{now as hw_now, schedule as hw_schedule, init as hw_init};
+use crate::{Interrupt, TaskOnly, Runtime, timer_hw};
 
 pub(crate) fn init() {
-    hw_init();
+    timer_hw::init();
 }
 
 /// Timestamp in microseconds since boot.
-/// 
+///
 /// This wraps after 2^32 microseconds, or about 71 minutes.
 #[derive(Copy, Clone, Format, Eq, PartialEq)]
 pub struct Instant(pub u32);
 
 impl Instant {
-    pub const fn is_before(&self, other: Self) -> bool {
-        !(other.0.wrapping_sub(self.0) > 0x8000_0000)
+    pub const fn is_after(&self, other: Self) -> bool {
+        other.0.wrapping_sub(self.0) >= 0x8000_0000
     }
 
     pub const fn add_us(&self, us: u32) -> Self {
@@ -30,7 +28,7 @@ impl Runtime {
     /// Get the current time.
     #[inline]
     pub fn now(&self) -> Instant {
-        hw_now()
+        timer_hw::now()
     }
 
     /// Wait until the given time.
@@ -81,25 +79,25 @@ impl Wait {
         self.next.get()
             .map(|ptr| unsafe { ptr.as_ref() })
     }
-    
+
     fn link(self: Pin<&mut Self>) {
-        if !self.linked.get() {    
+        if !self.linked.get() {
             defmt::trace!("linking timer at {=u32}", self.target.0);
             let mut node_ref = HEAD.get(self.rt);
             let mut prev = None;
-    
+
             while let Some(node_ptr) = node_ref.get() {
                 let node = unsafe { node_ptr.as_ref() };
-    
-                if self.target.is_before(node.target) {
+
+                if !self.target.is_after(node.target) {
                     node.prev.set(Some(NonNull::from(self.as_ref().get_ref())));
                     break;
                 }
-    
+
                 prev = Some(node_ptr);
                 node_ref = &node.next;
             }
-    
+
             self.prev.set(prev);
             self.next.set(node_ref.get());
             node_ref.set(Some(NonNull::from(self.as_ref().get_ref())));
@@ -116,7 +114,7 @@ impl Future for Wait {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let now = self.rt.now();
 
-        if self.target.is_before(now) {
+        if !self.target.is_after(now) {
             return Poll::Ready(());
         }
 
@@ -145,7 +143,7 @@ impl Drop for Wait {
 }
 
 /// Timer callback to wake and execute expired timers.
-/// 
+///
 /// Safety: must not be called from within a task.
 pub(crate) unsafe fn tick(rt: Runtime, now: Instant) {
     let head = HEAD.get(rt);
@@ -153,7 +151,7 @@ pub(crate) unsafe fn tick(rt: Runtime, now: Instant) {
     while let Some(node_ptr) = head.get() {
         let node = unsafe { node_ptr.as_ref() };
 
-        if now.is_before(node.target) {
+        if node.target.is_after(now) {
             break;
         }
 
@@ -164,7 +162,7 @@ pub(crate) unsafe fn tick(rt: Runtime, now: Instant) {
         node.linked.set(false);
 
         defmt::trace!("notifying timer at {=u32}", node.target.0);
-        
+
         unsafe {
             node.waker.notify();
         }
@@ -178,5 +176,5 @@ fn schedule(rt: Runtime) {
         unsafe { head.as_ref() }.target
     });
 
-    hw_schedule(first);
+    timer_hw::schedule(first);
 }
