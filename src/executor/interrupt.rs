@@ -6,7 +6,6 @@ use core::{
 };
 
 use crate::Runtime;
-
 use super::RunQueueNode;
 
 /// Event handling primitive for waiting for an interrupt.

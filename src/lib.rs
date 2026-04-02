@@ -32,6 +32,7 @@ cfg_select! {
         pub mod rp;
         pub use rp::{serial_number::{serial_number, SERIAL_NUMBER_LEN}};
     }
+    _ => {}
 }
 
 #[cfg(feature="time")]
@@ -40,16 +41,23 @@ pub mod time;
 #[cfg(any(feature="usb"))]
 pub mod usb;
 
-pub const CLOCK_HZ: u32 = cfg_select!{
+cfg_select!{
     any(
         feature="samd-clock-48m-usb",
         feature="samd-clock-48m-internal",
         feature="samd-clock-48m-external-32k-osc",
         feature="samd-clock-48m-external-32k-xtal",
-    ) => 48_000_000,
-    feature="rp2040" => 125_000_000,
-    feature="rp2350" => 150_000_000,
-};
+    ) =>  {
+        pub const CLOCK_HZ: u32 = 48_000_000;
+    }
+    feature="rp2040" => {
+        pub const CLOCK_HZ: u32 = 125_000_000;
+    }
+    feature="rp2350" => {
+        pub const CLOCK_HZ: u32 = 150_000_000;
+    }
+    _ => {}
+}
 
 /// Interface with the macro-generated code
 #[doc(hidden)]
@@ -71,6 +79,7 @@ pub mod internal {
             any(feature = "rp2040", feature = "rp2350") => {
                 crate::rp::init();
             }
+            _ => {}
         }
 
         #[cfg(feature = "time")]
