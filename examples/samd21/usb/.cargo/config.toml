@@ -2,7 +2,7 @@
 target = "thumbv6m-none-eabi"
 
 [target.thumbv6m-none-eabi]
-runner = 'probe-rs run --chip ATSAMD11C14A --catch-hardfault'
+runner = 'probe-rs run --chip ATSAMD21J18A --catch-hardfault'
 
 rustflags = [
 
