@@ -17,6 +17,7 @@ pub mod flash;
 pub mod usb;
 
 pub mod i2c;
+pub mod spi;
 
 #[cfg(all(feature = "rp2040", feature = "rp2040-boot2-w25q080"))]
 #[unsafe(link_section = ".boot2")]
@@ -162,6 +163,10 @@ pub(crate) fn init() {
         cortex_m::peripheral::NVIC::unmask(Interrupt::I2C0_IRQ);
         #[cfg(feature = "i2c1")]
         cortex_m::peripheral::NVIC::unmask(Interrupt::I2C1_IRQ);
+        #[cfg(feature = "spi0")]
+        cortex_m::peripheral::NVIC::unmask(Interrupt::SPI0_IRQ);
+        #[cfg(feature = "spi1")]
+        cortex_m::peripheral::NVIC::unmask(Interrupt::SPI1_IRQ);
 
     }
 }

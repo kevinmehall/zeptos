@@ -103,6 +103,12 @@ use crate::rp;
 
             #[cfg(all(any(feature = "rp2040", feature = "rp2350"), feature = "i2c1"))]
             i2c1: unsafe { <rp::i2c::I2c1 as rp::i2c::StaticInstance>::steal() },
+
+            #[cfg(all(any(feature = "rp2040", feature = "rp2350"), feature = "spi0"))]
+            spi0: unsafe { <rp::spi::Spi0 as rp::spi::StaticInstance>::steal() },
+
+            #[cfg(all(any(feature = "rp2040", feature = "rp2350"), feature = "spi1"))]
+            spi1: unsafe { <rp::spi::Spi1 as rp::spi::StaticInstance>::steal() },
         }
     }
 
@@ -150,4 +156,10 @@ pub struct Hardware {
 
     #[cfg(all(any(feature = "rp2040", feature = "rp2350"), feature = "i2c1"))]
     pub i2c1: rp::i2c::I2c1,
+
+    #[cfg(all(any(feature = "rp2040", feature = "rp2350"), feature = "spi0"))]
+    pub spi0: rp::spi::Spi0,
+
+    #[cfg(all(any(feature = "rp2040", feature = "rp2350"), feature = "spi1"))]
+    pub spi1: rp::spi::Spi1,
 }

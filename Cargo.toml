@@ -41,6 +41,8 @@ rp2350 = ["dep:rp-pac", "rp-pac/rp235x"]
 rom-func-cache = []
 i2c0 = []
 i2c1 = []
+spi0 = []
+spi1 = []
 
 usb = []
 time = []
