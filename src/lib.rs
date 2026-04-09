@@ -70,9 +70,6 @@ cfg_select!{
 #[doc(hidden)]
 pub mod internal {
     pub use cortex_m_rt;
-
-    #[cfg(all(any(feature = "rp2040", feature = "rp2350"), feature = "i2c0"))]
-use crate::rp;
     pub use crate::{ Hardware, Runtime, executor::{ RunQueue, RunQueueNode, Task, TaskStorage } };
 
     #[inline(always)]
@@ -99,16 +96,34 @@ use crate::rp;
             usb: unsafe { crate::usb::Usb::new(rt) },
 
             #[cfg(all(any(feature = "rp2040", feature = "rp2350"), feature = "i2c0"))]
-            i2c0: unsafe { <rp::i2c::I2c0 as rp::i2c::StaticInstance>::steal() },
+            i2c0: unsafe { <crate::rp::i2c::I2c0 as crate::rp::i2c::StaticInstance>::steal() },
 
             #[cfg(all(any(feature = "rp2040", feature = "rp2350"), feature = "i2c1"))]
-            i2c1: unsafe { <rp::i2c::I2c1 as rp::i2c::StaticInstance>::steal() },
+            i2c1: unsafe { <crate::rp::i2c::I2c1 as crate::rp::i2c::StaticInstance>::steal() },
 
             #[cfg(all(any(feature = "rp2040", feature = "rp2350"), feature = "spi0"))]
-            spi0: unsafe { <rp::spi::Spi0 as rp::spi::StaticInstance>::steal() },
+            spi0: unsafe { <crate::rp::spi::Spi0 as crate::rp::spi::StaticInstance>::steal() },
 
             #[cfg(all(any(feature = "rp2040", feature = "rp2350"), feature = "spi1"))]
-            spi1: unsafe { <rp::spi::Spi1 as rp::spi::StaticInstance>::steal() },
+            spi1: unsafe { <crate::rp::spi::Spi1 as crate::rp::spi::StaticInstance>::steal() },
+
+            #[cfg(all(any(feature = "samd11", feature = "samd21"), feature = "sercom0"))]
+            sercom0: unsafe { <crate::samd::sercom::Sercom0 as crate::samd::sercom::StaticSercom>::steal() },
+
+            #[cfg(all(any(feature = "samd11", feature = "samd21"), feature = "sercom1"))]
+            sercom1: unsafe { <crate::samd::sercom::Sercom1 as crate::samd::sercom::StaticSercom>::steal() },
+
+            #[cfg(all(any(feature = "samd11", feature = "samd21"), feature = "sercom2"))]
+            sercom2: unsafe { <crate::samd::sercom::Sercom2 as crate::samd::sercom::StaticSercom>::steal() },
+
+            #[cfg(all(any(feature = "samd11", feature = "samd21"), feature = "sercom3"))]
+            sercom3: unsafe { <crate::samd::sercom::Sercom3 as crate::samd::sercom::StaticSercom>::steal() },
+
+            #[cfg(all(any(feature = "samd11", feature = "samd21"), feature = "sercom4"))]
+            sercom4: unsafe { <crate::samd::sercom::Sercom4 as crate::samd::sercom::StaticSercom>::steal() },
+
+            #[cfg(all(any(feature = "samd11", feature = "samd21"), feature = "sercom5"))]
+            sercom5: unsafe { <crate::samd::sercom::Sercom5 as crate::samd::sercom::StaticSercom>::steal() },
         }
     }
 
@@ -162,4 +177,22 @@ pub struct Hardware {
 
     #[cfg(all(any(feature = "rp2040", feature = "rp2350"), feature = "spi1"))]
     pub spi1: rp::spi::Spi1,
+
+    #[cfg(all(any(feature = "samd11", feature = "samd21"), feature = "sercom0"))]
+    pub sercom0: samd::sercom::Sercom0,
+
+    #[cfg(all(any(feature = "samd11", feature = "samd21"), feature = "sercom1"))]
+    pub sercom1: samd::sercom::Sercom1,
+
+    #[cfg(all(any(feature = "samd11", feature = "samd21"), feature = "sercom2"))]
+    pub sercom2: samd::sercom::Sercom2,
+
+    #[cfg(all(any(feature = "samd11", feature = "samd21"), feature = "sercom3"))]
+    pub sercom3: samd::sercom::Sercom3,
+
+    #[cfg(all(any(feature = "samd11", feature = "samd21"), feature = "sercom4"))]
+    pub sercom4: samd::sercom::Sercom4,
+
+    #[cfg(all(any(feature = "samd11", feature = "samd21"), feature = "sercom5"))]
+    pub sercom5: samd::sercom::Sercom5,
 }

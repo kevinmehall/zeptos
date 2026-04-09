@@ -34,6 +34,13 @@ samd-clock-48m-usb = []
 samd-clock-48m-internal = []
 samd-clock-48m-external-32k-xtal = []
 samd-clock-48m-external-32k-osc = []
+sercom0 = []
+sercom1 = []
+sercom2 = []
+sercom3 = []
+sercom4 = []
+sercom5 = []
+
 
 rp2040 = ["dep:rp-pac", "rp-pac/rp2040"]
 rp2040-boot2-w25q080 = ["rp2040-boot2"]
