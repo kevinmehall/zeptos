@@ -1,2 +1,2 @@
-#[cfg(all(feature="time"))]
+#[cfg(feature="time")]
 pub(crate) mod systick;

@@ -45,7 +45,7 @@ pub mod time;
 #[cfg(feature="time")]
 use cortex_m::systick as timer_hw;
 
-#[cfg(any(feature="usb"))]
+#[cfg(feature="usb")]
 pub mod usb;
 
 cfg_select!{
@@ -95,7 +95,7 @@ use crate::rp;
         crate::time::init();
 
         Hardware {
-            #[cfg(all(feature = "usb"))]
+            #[cfg(feature = "usb")]
             usb: unsafe { crate::usb::Usb::new(rt) },
 
             #[cfg(all(any(feature = "rp2040", feature = "rp2350"), feature = "i2c0"))]
