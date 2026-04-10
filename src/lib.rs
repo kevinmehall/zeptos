@@ -1,17 +1,30 @@
 //! A tiny runtime for async Rust on microcontrollers.
 //!
-//! The functionality of this crate is enabled by Cargo features:
+//! Zeptos turns the ARM Cortex-M NVIC into an executor for async Rust. It runs
+//! entirely in handler mode: awaiting an interrupt means your task continues
+//! execution from that interrupt handler. Execution bounces between interrupt
+//! handlers, going to sleep rather than ever returning to thread mode. Because
+//! ISRs at the same priority level run to completion without preemption, it's
+//! single-threaded, with no need for any synchronization overhead anywhere.
 //!
-//! * `samd11` or `samd21`: Support for the SAM D11 or D21 microcontrollers.
+//! It requires Rust Nightly.
+//!
+//! The device-specific functionality of this crate is enabled by Cargo features:
+//!
+//! * `samd11` or `samd21`: Support for the Atmel / Microchip SAM D11 or D21 microcontrollers.
 //!     * `samd-clock-48m-usb`, `samd-clock-48m-internal`, `samd-clock-48m-external-32k-osc`, or `samd-clock-48m-external-32k-xtal`: Configure the clock source
-//! * `rp2040`: Support for the Raspberry Pi RP2040 microcontroller.
-//!    * `rp2040-boot2-w25q080`
-//!    * `rom-func-cache`
+//!     * `sercom0`, `sercom1`, `sercom2`, `sercom3`, `sercom4`, or `sercom5`: Enable clocks and interrupts for the corresponding SERCOM peripheral, and add it to the `Hardware` struct passed to the main task.
+//!
+//! * `rp2040` or `rp2350`: Support for the Raspberry Pi RP2040 or RP2350 microcontroller.
+//!    * `rp2040-boot2-w25q080` (RP2040 only): Use the W25Q080 bootloader for XIP on Raspberry Pi Pico.
+//!    * `rom-func-cache` (RP2040 only): Enable ROM function cache.
+//!    * `i2c0`, `i2c1`, `spi0`, or `spi1`: Enable clocks and interrupts for the corresponding peripheral, and add it to the `Hardware` struct passed to the main task.
+//!    * `gpio-interrupts`: Enables GPIO interrupts.
 //!
 //! * `usb`: Enables USB support.
 //! * `time`: Enables systick timer.
 #![no_std]
-#![feature(impl_trait_in_assoc_type, sync_unsafe_cell)]
+#![feature(impl_trait_in_assoc_type, sync_unsafe_cell, doc_cfg)]
 
 use core::marker::PhantomData;
 
@@ -27,13 +40,17 @@ pub use executor::{Interrupt, InterruptList, TaskOnly, TaskRef};
 
 mod cortex_m;
 
+#[cfg(any(feature="samd11", feature="samd21"))]
+pub mod samd;
+
+#[cfg(any(feature="rp2040", feature="rp2350"))]
+pub mod rp;
+
 cfg_select! {
     any(feature="samd11", feature="samd21") => {
-        pub mod samd;
         pub use samd::{serial_number::{serial_number, SERIAL_NUMBER_LEN}};
     }
     any(feature="rp2040", feature="rp2350") => {
-        pub mod rp;
         pub use rp::{serial_number::{serial_number, SERIAL_NUMBER_LEN}};
     }
     _ => {}

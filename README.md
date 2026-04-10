@@ -4,6 +4,8 @@ A tiny runtime for async Rust on microcontrollers.
 
 Zeptos turns the ARM Cortex-M NVIC into an executor for async Rust. It runs entirely in handler mode: `await`ing an interrupt means your task continues execution from that interrupt handler. Execution bounces between interrupt handlers, going to sleep rather than ever returning to thread mode. Because ISRs at the same priority level run to completion without preemption, it's single-threaded, with no need for any synchronization overhead anywhere.
 
+It requires Rust Nightly.
+
 ## Hardware support
 
 The core scheduler should work on any ARM Cortex-M part. Zeptos additionally includes a USB stack and driver code for select peripherals on:

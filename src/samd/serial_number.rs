@@ -10,9 +10,7 @@ const SN_2: u32 = 0x0080A040;
 const SN_3: u32 = 0x0080A044;
 const SN_4: u32 = 0x0080A048;
 
-/// Returns the serial number of the chip as 4 32-bit integers. The serial
-/// number is only guaranteed to be unique if all 128 bits are used.
-pub fn split_serial_number() -> (u32, u32, u32, u32) {
+fn split_serial_number() -> (u32, u32, u32, u32) {
     unsafe {
         (
             ptr::read(SN_1 as *const u32),
@@ -25,8 +23,7 @@ pub fn split_serial_number() -> (u32, u32, u32, u32) {
 
 pub const SERIAL_NUMBER_LEN: usize = 16;
 
-/// Returns the serial number of the chip as an array of bytes. The serial
-/// number is only guaranteed to be unique if all 16 bytes are used.
+/// Returns the serial number of the chip as an array of bytes.
 pub fn serial_number() -> [u8; SERIAL_NUMBER_LEN] {
     let sn = split_serial_number();
     [

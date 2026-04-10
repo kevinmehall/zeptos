@@ -1,3 +1,4 @@
+//! Hardware support for RP2040 and RP2350.
 #[allow(unused_imports)]
 use rp_pac::{clocks::vals::{ClkAdcCtrlAuxsrc, ClkPeriCtrlAuxsrc, ClkRefCtrlSrc, ClkSysCtrlAuxsrc, ClkSysCtrlSrc, ClkUsbCtrlAuxsrc}, pll, resets::regs::Peripherals, Interrupt};
 pub use rp_pac as pac;
@@ -14,7 +15,7 @@ pub mod rom_data;
 pub mod flash;
 
 #[cfg(feature="usb")]
-pub mod usb;
+pub(crate) mod usb;
 
 pub mod i2c;
 pub mod spi;

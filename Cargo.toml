@@ -54,3 +54,12 @@ spi1 = []
 usb = []
 time = []
 gpio-interrupts = []
+
+[package.metadata.docs.rs]
+target = ["thumbv6m-none-eabi"]
+features = [
+    "samd21", "samd-clock-48m-usb", "sercom0", "sercom1", "sercom2", "sercom3", "sercom4", "sercom5",
+    "rp2040", "i2c0", "i2c1", "spi0", "spi1",
+    "usb", "time", "gpio-interrupts"
+]
+rustdoc-args = ["--cfg", "docsrs"]

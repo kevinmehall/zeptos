@@ -1,3 +1,5 @@
+//! Hardware support for SAM D11 and SAM D21 microcontrollers.
+
 #[cfg(feature="samd11")]
 pub use atsamd11d as pac;
 
@@ -14,7 +16,7 @@ pub mod clock;
 pub mod calibration;
 
 #[cfg(feature="usb")]
-pub mod usb;
+pub(crate) mod usb;
 
 pub(crate) mod serial_number;
 
