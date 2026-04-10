@@ -24,6 +24,7 @@
 //! * `usb`: Enables USB support.
 //! * `time`: Enables systick timer.
 #![no_std]
+#![allow(unused_features)]
 #![feature(impl_trait_in_assoc_type, sync_unsafe_cell, doc_cfg)]
 
 use core::marker::PhantomData;

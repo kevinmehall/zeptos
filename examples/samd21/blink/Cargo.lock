@@ -383,7 +383,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "zeptos-demo"
+name = "zeptos-demo-samd21-blink"
 version = "0.1.0"
 dependencies = [
  "cortex-m",

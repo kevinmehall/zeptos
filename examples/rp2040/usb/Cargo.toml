@@ -1,5 +1,5 @@
 [package]
-name = "zeptos-demo"
+name = "zeptos-demo-rp2040-usb"
 version = "0.1.0"
 edition = "2021"
 

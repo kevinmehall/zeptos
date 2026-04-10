@@ -1,0 +1,47 @@
+name: Rust
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+  schedule: # Check for breakage from changes in Rust Nightly every week
+    - cron: '46 13 * * 2'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        persist-credentials: false
+    - name: Install toolchain
+      uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9
+      with:
+        toolchain: nightly
+        targets: thumbv6m-none-eabi,thumbv8m.main-none-eabihf
+    - name: Run tests
+      run: cargo test --verbose
+    - name: Build examples
+      run: ./examples/all build --release
+    - name: Upload examples
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      with:
+        path: |
+          examples/*/*/target/thumb*/release/zeptos-demo-*
+          !examples/*/*/target/thumb*/release/zeptos-demo-*.d
+    - name: Check minimal config
+      run: cargo check --target thumbv6m-none-eabi
+    - name: Check minimal RP2040
+      run: cargo check --target thumbv6m-none-eabi --features rp2040
+    - name: Check RP2040 peripherals
+      run: cargo check --target thumbv6m-none-eabi --features rp2040,spi0,spi1,i2c0,i2c1
+    - name: Check minimal RP2350
+      run: cargo check --target thumbv8m.main-none-eabihf --features rp2350
+    - name: Check minimal SAMD11
+      run: cargo check --target thumbv6m-none-eabi --features samd11,samd-clock-48m-usb
+    - name: Check SAMD11 peripherals
+      run: cargo check --target thumbv6m-none-eabi --features samd11,samd-clock-48m-usb,sercom0,sercom1,sercom2

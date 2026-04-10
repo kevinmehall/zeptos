@@ -395,7 +395,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "zeptos-demo"
+name = "zeptos-demo-rp2040-blink"
 version = "0.1.0"
 dependencies = [
  "cortex-m",

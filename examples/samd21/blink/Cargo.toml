@@ -1,5 +1,5 @@
 [package]
-name = "zeptos-demo"
+name = "zeptos-demo-samd21-blink"
 version = "0.1.0"
 edition = "2021"
 
@@ -25,4 +25,3 @@ debug = true
 codegen-units = 1
 lto = true
 opt-level = "z"
-

@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+cd $(dirname "$0")
+
+status=0
+
+for example in $(find . -type f -name 'Cargo.toml' -exec dirname {} \;); do
+    echo "::group::$example"
+    (cd $example; cargo $@) || status=$?
+    echo "::endgroup::"
+    echo ""
+done;
+
+exit $status
