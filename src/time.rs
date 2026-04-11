@@ -146,6 +146,7 @@ impl Drop for Wait {
 ///
 /// Safety: must not be called from within a task.
 pub(crate) unsafe fn tick(rt: Runtime, now: Instant) {
+    defmt::trace!("tick at {=u32}", now.0);
     let head = HEAD.get(rt);
 
     while let Some(node_ptr) = head.get() {
@@ -175,6 +176,8 @@ fn schedule(rt: Runtime) {
     let first = HEAD.get(rt).get().map(|head| {
         unsafe { head.as_ref() }.target
     });
+
+    defmt::trace!("scheduling next timer at {=u32}", first.map(|t| t.0).unwrap_or(0));
 
     timer_hw::schedule(first);
 }

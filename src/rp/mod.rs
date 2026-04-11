@@ -14,6 +14,9 @@ pub mod rom_data;
 #[cfg(feature = "rp2040")]
 pub mod flash;
 
+#[cfg(feature="time")]
+pub(crate) mod timer;
+
 #[cfg(feature="usb")]
 pub(crate) mod usb;
 
@@ -146,6 +149,8 @@ pub(crate) fn init() {
     enable.set_sysinfo(true);
     enable.set_busctrl(true);
     #[cfg(feature = "usb")] enable.set_usbctrl(true);
+    #[cfg(all(feature = "time", feature="rp2040"))] enable.set_timer(true);
+    #[cfg(all(feature = "time", feature="rp2350"))] enable.set_timer0(true);
 
     pac::RESETS.reset().write_value_clear(enable);
     while ((!pac::RESETS.reset_done().read().0) & enable.0) != 0 {}
@@ -168,7 +173,10 @@ pub(crate) fn init() {
         cortex_m::peripheral::NVIC::unmask(Interrupt::SPI0_IRQ);
         #[cfg(feature = "spi1")]
         cortex_m::peripheral::NVIC::unmask(Interrupt::SPI1_IRQ);
-
+        #[cfg(all(feature = "time", feature = "rp2040"))]
+        cortex_m::peripheral::NVIC::unmask(Interrupt::TIMER_IRQ_0);
+        #[cfg(all(feature = "time", feature = "rp2350"))]
+        cortex_m::peripheral::NVIC::unmask(Interrupt::TIMER0_IRQ_0);
     }
 }
 

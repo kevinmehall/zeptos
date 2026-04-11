@@ -39,8 +39,6 @@ pub use zeptos_macros::task;
 mod executor;
 pub use executor::{Interrupt, InterruptList, TaskOnly, TaskRef};
 
-mod cortex_m;
-
 #[cfg(any(feature="samd11", feature="samd21"))]
 pub mod samd;
 
@@ -61,7 +59,15 @@ cfg_select! {
 pub mod time;
 
 #[cfg(feature="time")]
-use cortex_m::systick as timer_hw;
+cfg_select! {
+    any(feature="rp2040", feature="rp2350") => {
+        use rp::timer as timer_hw;
+    }
+    _ => {
+        mod cortex_m_systick;
+        use cortex_m_systick as timer_hw;
+    }
+}
 
 #[cfg(feature="usb")]
 pub mod usb;
