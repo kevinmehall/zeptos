@@ -181,3 +181,5 @@ fn schedule(rt: Runtime) {
 
     timer_hw::schedule(first);
 }
+
+defmt::timestamp!("{=u32:us}", { timer_hw::now().0 });

@@ -1,4 +1,4 @@
-use core::cell::SyncUnsafeCell;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 use cortex_m::peripheral::SYST;
 use cortex_m_rt::exception;
@@ -18,22 +18,19 @@ pub(crate) fn init() {
     }
 }
 
-static NOW: SyncUnsafeCell<u32> = SyncUnsafeCell::new(0);
+static NOW: AtomicU32 = AtomicU32::new(0);
 
 #[exception]
 fn SysTick() {
-    unsafe {
-        let now = &mut *(NOW.get());
-        *now = (*now).wrapping_add(1000);
-    };
+    let n = NOW.load(Ordering::Relaxed);
+    NOW.store(n.wrapping_add(1000), Ordering::Relaxed);
     unsafe { tick(Runtime::steal(), now()) };
 }
 
 pub(crate) fn now() -> Instant{
-    unsafe { Instant(*(NOW.get())) }
+    Instant(NOW.load(Ordering::Relaxed))
 }
 
 pub(crate) fn schedule(_time: Option<Instant>) {
     // no-op, we're going to call `tick()` every millisecond anyway
 }
-
