@@ -12,13 +12,15 @@ use super::RunQueueNode;
 /// This is normally placed in a `static`. An ISR can call `notify` to
 /// wake the task that is waiting on the future returned by `until`.
 pub struct Interrupt {
-    poll_fn: Cell<Option<unsafe fn()>>,
+    poll_fn: Cell<unsafe fn()>,
 }
+
+fn no_op() {}
 
 impl Interrupt {
     pub const fn new() -> Self {
         Self {
-            poll_fn: Cell::new(None),
+            poll_fn: Cell::new(no_op),
         }
     }
 
@@ -27,13 +29,12 @@ impl Interrupt {
             panic!("interrupt passed a waker from another executor");
         }
         let node = unsafe { &*(waker.data() as *mut RunQueueNode) };
-        self.poll_fn.set(Some(node.func()))
+        self.poll_fn.set(node.func())
     }
 
     pub unsafe fn notify(&self) {
-        if let Some(poll) = self.poll_fn.take() {
-            unsafe { poll() }
-        }
+        let poll = self.poll_fn.replace(no_op);
+        unsafe { poll() }
     }
 
     pub fn until<'a, F: FnMut() -> R, R: UntilOutput>(&'a self, condition: F) -> Until<'a, F> {
